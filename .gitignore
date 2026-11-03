@@ -1,0 +1,14 @@
+/target/
+node_modules/
+dist/
+coverage/
+*.log
+.env
+.env.*
+!.env.example
+apps/monitor/src-tauri/gen/
+__pycache__/
+*.pyc
+/reports/
+*.pem
+*.key
