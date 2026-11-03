@@ -1,0 +1,15 @@
+[package]
+name = "raspbaby-media"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+gstreamer-runtime = ["dep:gstreamer", "dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
+
+[dependencies]
+raspbaby-protocol = { path = "../raspbaby-protocol" }
+gstreamer = { version = "0.24", features = ["v1_22"], optional = true }
+gstreamer-webrtc = { version = "0.24", features = ["v1_22"], optional = true }
+gstreamer-sdp = { version = "0.24", features = ["v1_22"], optional = true }

@@ -1,0 +1,13 @@
+{
+  "name": "raspbaby-monitor",
+  "private": true,
+  "version": "0.1.0",
+  "packageManager": "pnpm@12.8.2",
+  "scripts": {
+    "dev": "pnpm --filter @raspbaby/monitor dev",
+    "build": "pnpm --filter @raspbaby/monitor build",
+    "test": "pnpm -r test",
+    "check": "pnpm -r check",
+    "tauri": "pnpm --filter @raspbaby/monitor tauri"
+  }
+}

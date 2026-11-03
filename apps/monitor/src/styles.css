@@ -1,0 +1,127 @@
+@import "tailwindcss";
+@theme {
+  --color-background: #10141b;
+  --color-surface: #1a202a;
+  --color-line: #2c3441;
+  --color-secondary: #a5b0bf;
+  --color-accent: #b9a7ff;
+  --color-success: #68d6b0;
+  --color-danger: #ef7777;
+  --color-primary: #8db7ff;
+}
+:root {
+  font-family: "Segoe UI", system-ui, sans-serif;
+  color: #f5f7fa;
+  background: #10141b;
+  font-synthesis: none;
+  color-scheme: dark;
+}
+body {
+  margin: 0;
+  min-width: 320px;
+}
+button {
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  padding: 10px 14px;
+  border-radius: 10px;
+  font-weight: 600;
+  transition: background 0.15s;
+}
+button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+button:focus-visible,
+textarea:focus-visible {
+  outline: 2px solid #b9a7ff;
+  outline-offset: 3px;
+}
+.primary {
+  background: #8db7ff;
+  color: #10141b;
+}
+.primary:hover:not(:disabled) {
+  background: #b3cfff;
+}
+.secondary {
+  border: 1px solid #394454;
+  background: transparent;
+  color: #d9e1ed;
+}
+.secondary:hover:not(:disabled) {
+  background: #2c3441;
+}
+.brand {
+  border: 1px solid #4d465f;
+  border-radius: 16px;
+  color: #b9a7ff;
+  background: #272333;
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+  font-size: 30px;
+}
+.badge,
+.eyebrow {
+  font-size: 10px;
+  letter-spacing: 0.14em;
+  font-weight: 600;
+  color: #c7b7ec;
+}
+.badge {
+  padding: 8px 10px;
+  border: 1px solid #443f53;
+  border-radius: 8px;
+}
+.status {
+  display: flex;
+  gap: 7px;
+  align-items: center;
+  border: 1px solid #3e4550;
+  padding: 7px 12px;
+  border-radius: 50px;
+  font-size: 12px;
+  color: #c6cdd7;
+  text-transform: capitalize;
+}
+.status.active {
+  color: #68d6b0;
+  border-color: #326253;
+}
+.viewport {
+  position: relative;
+  width: 100%;
+  aspect-ratio: 16/9;
+  background: #090c11;
+}
+.panel {
+  padding: 20px;
+  background: #1a202a;
+  border: 1px solid #2c3441;
+  border-radius: 18px;
+}
+textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 110px;
+  resize: vertical;
+  background: #10141b;
+  border: 1px solid #394454;
+  border-radius: 10px;
+  padding: 12px;
+  color: #cad5e4;
+  font-size: 11px;
+  font-family: Consolas, monospace;
+}
+@media (max-width: 560px) {
+  .viewport {
+    aspect-ratio: 4/3;
+  }
+  .badge {
+    max-width: 100px;
+    text-align: center;
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "name": "@raspbaby/monitor",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "tsc --noEmit && vite build",
+    "check": "tsc --noEmit && eslint src",
+    "format:check": "prettier --check src",
+    "format": "prettier --write src",
+    "test:media": "node scripts/media-integration.mjs",
+    "test": "vitest run",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@raspbaby/protocol-client": "workspace:*",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.14.0",
+    "typescript-eslint": "^8.72.1",
+    "prettier": "^3.7.0",
+    "playwright": "^1.56.0",
+    "@tailwindcss/vite": "^4.1.18",
+    "@tauri-apps/cli": "^2.9.6",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^4.7.0",
+    "tailwindcss": "^4.1.18",
+    "typescript": "^5.9.3",
+    "vite": "^6.4.1",
+    "vitest": "^5.1.0"
+  }
+}

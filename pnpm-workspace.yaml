@@ -1,0 +1,8 @@
+packages:
+  - apps/*
+  - packages/*
+allowBuilds:
+  esbuild: true
+# Upstream lint tools still resolve minimatch 10; 11.0.1 fixes GHSA-g3hv-75wg-m249.
+overrides:
+  minimatch: ^11.0.1
