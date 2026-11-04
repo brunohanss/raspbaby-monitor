@@ -13,3 +13,10 @@ planned Pi 4. Do not extend its test result to Pi 4 or other camera models.
 
 Use the pin when preparing future installation work. Verify the image again
 before flashing. Do not silently change the image release or OS major version.
+
+On 2026-11-04, the user approved an exact-kernel Pi 3B+ USB compatibility boot
+service after temporary tests produced clear video. Its installation, removal,
+and repeated health-checked boots are recorded in
+[the persistent setup](../persistent-pio-proposal.md). This is a narrow hardware
+workaround for the observed camera and kernel. It does not close the media gate
+or authorize general product installation work ahead of that gate.

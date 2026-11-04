@@ -13,6 +13,8 @@ its pending real-camera and Android shell checks:
   Clippy with warnings denied. Native GStreamer checks passed on Windows and
   the Pi; the Pi ran 14 daemon/media tests.
 - All 11 USB diagnostic tool tests and three capability probe tests passed.
+  The persistent compatibility service passed 26 offline tests, including
+  decode validation, bounded retry, device readiness, and rollback guards.
   The media runner's three self-tests passed. Frontend type, lint, format,
   production build, and Windows native debug build passed.
 - The final frontend suite passed 17 tests. The exact selected Murloc WAV
@@ -20,16 +22,28 @@ its pending real-camera and Android shell checks:
   advancing playback time, volume 65%, and no media error. Selection survived
   reload. Browser checks also covered preview Stop, volume persistence, size
   rejection, and Clear. The audio file remains local and outside Git.
+- A fresh Android APK also decoded the exact imported clip through normal
+  Preview button input. Duration was 2.844458 seconds; playback advanced from
+  0.343096 to 1.11418 seconds with no media error and reached its end. Selection
+  and 43% volume survived reload and full app restart. File input was automated;
+  Android picker interaction and audible physical output remain untested.
 - The frontend dependency audit found no known vulnerabilities. Cargo audit
   had no blocking vulnerability and five warnings: the existing GLib iterator
   advisory and unmaintained proc-macro-error, zbus_names, zvariant, and
   zvariant_derive dependencies. No advisory suppression was added.
+- Hosted commit `19205c5` passed all five GitHub Actions quality jobs, including
+  the synthetic native-media playback job.
 
 See [real camera validation](real-camera-validation.md),
 [background validation](background-validation.md), and
-[feasibility](feasibility.md) for evidence and remaining checks. The normal Pi
-boot path is unchanged. The PIO driver is temporary and is not a persistent
-installation. The media gate remains open.
+[feasibility](feasibility.md) for evidence and remaining checks. The user approved
+an experimental persistent compatibility setup on the tested Pi. Its original
+boot file was backed up and exported to the Windows host. Installation,
+removal, exact boot-file restoration, and reinstallation passed. Startup now
+requires three decoded real frames before it commits. See the
+[persistent setup record](persistent-pio-proposal.md). The media gate remains open.
+Two consecutive health-checked ordinary boots passed, and the first Windows
+camera connection after each boot produced clear VGA video and decoded audio.
 
 Date: 2026-11-03. Host: Windows x86-64. Rust: 1.93.1.
 Node: 24.21.0. pnpm: 12.8.2. GStreamer MSVC: 1.28.8.

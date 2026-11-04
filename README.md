@@ -10,14 +10,16 @@ navigation, and temperature, sound, and motion cards. Missing telemetry is
 shown as unavailable. It is never replaced with invented measurements.
 
 **Clear real-camera VGA playback is verified in the native Windows app and
-Android emulator.** These Pi 3B+ tests require an experimental DWC2 host driver
-with DMA disabled (PIO) and stock UVC. Its bounded runtime lease expires and
-restores the stock driver. Normal boot remains unchanged; this is not a
-permanent camera fix. See the
+Android emulator.** An approved experimental boot service is now installed on
+the tested Pi 3B+, using an exact-kernel DWC2 host driver with DMA disabled (PIO)
+and stock UVC. Before startup commits, a bounded check must decode three VGA
+frames. It permits one controlled rebind retry and restores stock on failure.
+Boot backups, computer export, and actual rollback were verified. This is not
+a general Pi 4 solution or a product release. See the
 [camera report](docs/real-camera-validation.md) and
-[Pi 3B+ USB compatibility experiment](docs/pi3-usb-compatibility.md).
+[persistent compatibility setup](docs/persistent-pio-proposal.md).
 The media gate remains open. Product pairing, discovery, detection, alerts,
-and installation remain pending.
+and production installation remain pending.
 See the [feasibility report](docs/feasibility.md) for the open checks.
 
 ![Monitor interface before a camera connects](docs/assets/monitor-ui.png)

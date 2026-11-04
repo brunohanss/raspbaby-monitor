@@ -74,13 +74,41 @@ The Android 15 emulator also passed clear real VGA playback through Home for
 notification Stop. See the [camera report](real-camera-validation.md) and
 [background report](background-validation.md) for the platform evidence.
 
-These results require a separate experimental runtime DWC2 host module with
-DMA disabled (PIO), built for the exact kernel, and the stock UVC driver.
-The bounded compatibility lease restores the stock driver when it expires.
-Normal boot remains on the original legacy USB path. This is not a permanent
-camera fix. See [Pi 3B+ USB compatibility](pi3-usb-compatibility.md) before any
-opt-in experiment. The broader media gate remains open, including physical
-Android, Pi 4, audible output, latency, synchronization, and sustained testing.
+These initial results used a bounded runtime DWC2 PIO experiment. An approved
+experimental boot service is now installed for this exact Pi 3B+ kernel with
+stock UVC. See [the persistent setup](persistent-pio-proposal.md) for its scope,
+backup, removal, and physical recovery procedures.
+
+### Persistent startup validation: 2026-11-04
+
+An earlier service version bound PIO after reboot but returned only tiny invalid
+video buffers and no FFmpeg frames. A guarded full host rebind recovered capture;
+concurrent audio/video then produced 20 clear frames out of 20 sampled frames.
+Driver binding alone is therefore not accepted as capture health.
+
+The current service decodes three MJPEG VGA frames before committing startup.
+Only a decode-health failure permits one controlled stock restore and PIO rebind;
+at most two health attempts are allowed. Startup has a 90-second systemd limit
+and a 75-second independent recovery timer. Failed startup restores stock.
+
+At 11:23:11 CET, an ordinary boot passed the first health attempt. The first
+native Windows **Connect camera** session then produced 48 video frames and
+146,880 decoded audio samples. A 640×480 canvas frame inspected in RAM was clear.
+**Stop** released the session. A second ordinary boot passed its first health
+attempt at 11:26:00 CET. Its first Windows connection produced 50 video frames
+and 146,400 decoded audio samples with a clear RAM-only frame. Stop released
+the sender. Both consecutive boots passed without manual driver activation.
+
+A separate post-rebind Windows check advanced to 530 video frames and 1,685,760
+audio samples while hidden for 35 seconds, then 575 frames and 1,832,160 samples
+after reopening. Stop released the session cleanly.
+
+The original boot backup was exported to the computer and verified. An actual
+uninstall restored the exact original config, bound stock USB, removed the unit
+and include, and unloaded the test module. The setup was reinstalled with the
+removal records retained in an archive. These checks do not establish general
+Pi 4 compatibility or long-running reliability. The broader gate remains open,
+including physical Android, audible output, latency, and synchronization.
 
 Use a visible clock and an audible/visible pulse to measure latency and sync.
 Use at least 20 samples for an initial latency distribution. Record the method

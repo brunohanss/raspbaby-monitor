@@ -25,6 +25,7 @@ jobs:
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: python3 -m unittest discover -s tests -v
       - run: python3 -m unittest discover -s tools/pi3-dwc2-pio -p test_tools.py -v
+      - run: python3 -m unittest discover -s tools/pi3-dwc2-pio/persistent -p test_persistent.py -v
 
   media-native:
     runs-on: ubuntu-24.04

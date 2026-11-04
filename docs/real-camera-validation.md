@@ -3,10 +3,50 @@
 Updated: 2026-11-04. Scope: Phase 0 feasibility and RB-001/RB-002.
 
 Current application result: Windows and Android VGA receivers now have clear
-visual evidence with the temporary DWC2 PIO host path. These new checks
+visual evidence with the experimental DWC2 PIO host path. These new checks
 supersede the earlier transport-only acceptance for this tested runtime path.
 The earlier corruption on the stock USB host path remains a separate failure.
-No permanent camera fix is installed, and the broad media gate remains open.
+An approved exact-kernel boot service is now installed on this Pi 3B+. It is
+experimental; the broad media gate remains open.
+
+## Persistent startup follow-up, 2026-11-04
+
+The approved installation uses a separate DWC2 host PIO module for kernel
+`6.18.50+rpt-rpi-v8`, with stock UVC. The original boot config backup was exported
+to the Windows computer and verified. An actual uninstall restored the exact
+original config SHA-256
+`fee3e47fe6d168f61882fac6ee6ee2802de4c7d65d8935320287af310e36e887`,
+bound stock USB, unloaded the test module, and removed the service unit and boot
+include. Reinstallation retained the earlier removal records in an archive.
+
+An earlier version passed service activation after reboot but produced tiny
+invalid video buffers and zero FFmpeg frames. A guarded full host rebind
+recovered capture. A concurrent microphone/video check then produced 20 clear
+frames out of 20 sampled frames. Binding the driver alone did not establish a
+usable camera stream.
+
+The current service requires FFmpeg to decode three MJPEG VGA frames before
+committing startup. Only a decode-health failure permits one controlled stock
+restore and PIO rebind, for at most two attempts. Startup has a 90-second systemd
+limit and an independent 75-second recovery timer; failed startup restores stock.
+The check discards decoded media and does not establish long-running health.
+
+An ordinary boot at 11:23:11 CET passed the first health attempt. The first
+native Windows **Connect camera** session produced 48 decoded video frames and
+146,880 decoded audio samples. A frame inspected directly from the application
+canvas in RAM showed a clear full-frame 640×480 picture. Stop released the
+session. A second ordinary boot passed its first health attempt at 11:26:00
+CET. Its first Windows connection produced 50 video frames and 146,400 decoded
+audio samples, with another clear RAM-only frame. Stop released the sender.
+Both consecutive boots passed without manual driver activation. No footage was stored.
+
+After the earlier guarded rebind, a separate Windows session reached 530 video
+frames and 1,685,760 audio samples during 35 seconds hidden, then 575 frames and
+1,832,160 samples after reopening. Stop released that session cleanly.
+
+See [the persistent compatibility setup](persistent-pio-proposal.md) for exact
+scope and recovery instructions. This is evidence for this tested Pi 3B+ and
+kernel, not a general Pi 4 solution or a production release.
 
 ## Current direct-capture result
 
@@ -31,10 +71,9 @@ They do not establish application performance or sustained 30 FPS capture.
 Windows and Android VGA application playback with this capture path now have
 evidence in the follow-ups below. The media feasibility gate remains open.
 
-This result used a separate experimental runtime host module on kernel
-`6.18.50+rpt-rpi-v8`. The stock host driver was restored after the trials.
-Normal boot remains configured for the original `dwc_otg` path; no permanent
-camera fix is installed. See the opt-in
+This earlier result used a separate experimental runtime host module on kernel
+`6.18.50+rpt-rpi-v8`. The stock host driver was restored after those trials.
+The later persistent installation is recorded above. See the initial opt-in
 [Pi 3B+ USB compatibility experiment](pi3-usb-compatibility.md) for scope,
 USB impact, build requirements, and restoration steps.
 

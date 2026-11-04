@@ -3,6 +3,10 @@
 This is an opt-in kernel diagnostic. It is not an installation step or a
 supported camera fix. The media feasibility gate remains open.
 
+The tested Pi now also has a separately approved
+[persistent compatibility setup](persistent-pio-proposal.md). The bounded
+diagnostic commands in this document remain separate from that boot service.
+
 ## Tested scope
 
 The available board is a Raspberry Pi 3 Model B Plus Rev 1.4, running ARM64

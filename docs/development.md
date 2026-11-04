@@ -153,6 +153,7 @@ cargo test --locked -p raspbaby-daemon -p raspbaby-media --features gstreamer-ru
 cargo clippy --locked -p raspbaby-daemon -p raspbaby-media --features gstreamer-runtime --all-targets -- -D warnings
 python -m unittest discover -s tests -v
 python -m unittest discover -s tools/pi3-dwc2-pio -p test_tools.py -v
+python -m unittest discover -s tools/pi3-dwc2-pio/persistent -p test_persistent.py -v
 pnpm check
 pnpm test
 pnpm build
