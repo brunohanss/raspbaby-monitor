@@ -13,3 +13,7 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT"
 repository = "https://github.com/brunohanss/raspbaby-monitor"
+
+# Keep the pixel-analysis loops inexpensive on the Pi in development builds.
+[profile.dev.package.raspbaby-detection]
+opt-level = 3

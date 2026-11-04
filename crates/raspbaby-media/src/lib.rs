@@ -170,9 +170,12 @@ impl PayloadTypes {
                 audio = audio.or(pt);
             }
         }
-        if media_order != ["m=video", "m=audio"] {
+        if media_order != ["m=video", "m=audio"]
+            && media_order != ["m=video", "m=audio", "m=application"]
+        {
             return Err(MediaError(
-                "spike requires exactly one video section followed by one audio section".into(),
+                "spike requires video then audio, with an optional trailing data channel section"
+                    .into(),
             ));
         }
         match (video, audio) {
@@ -198,6 +201,23 @@ pub fn media_pipeline(
     source: &SourceConfig,
 ) -> String {
     let (width, height) = preset.dimensions();
+    let real_capture = matches!(source, SourceConfig::LinuxCapture(_));
+    let video_tee = if real_capture {
+        " ! tee name=analysis_video_tee"
+    } else {
+        ""
+    };
+    let audio_tee = if real_capture {
+        " ! tee name=analysis_audio_tee"
+    } else {
+        ""
+    };
+    let analysis = if real_capture {
+        "analysis_video_tee. ! queue max-size-buffers=1 max-size-bytes=0 max-size-time=0 leaky=downstream ! videorate drop-only=true ! videoscale ! videoconvert ! video/x-raw,format=GRAY8,width=320,height=180,framerate=5/1 ! appsink name=analysis_video emit-signals=true sync=false max-buffers=1 drop=true enable-last-sample=false \
+         analysis_audio_tee. ! queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream ! appsink name=analysis_audio emit-signals=true sync=false max-buffers=1 drop=true enable-last-sample=false"
+    } else {
+        ""
+    };
     let (video, audio) = match source {
         SourceConfig::Synthetic => (
             format!(
@@ -214,14 +234,15 @@ pub fn media_pipeline(
     };
     format!(
         "webrtcbin name=peer bundle-policy=max-bundle \
-         {video} ! \
+         {video}{video_tee} ! \
          queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream ! \
          videoconvert ! x264enc tune=zerolatency speed-preset=ultrafast bitrate=1500 key-int-max=30 bframes=0 ! \
          video/x-h264,profile=constrained-baseline ! h264parse ! rtph264pay pt={} config-interval=-1 ! \
          application/x-rtp,media=video,encoding-name=H264,payload={} ! queue max-size-buffers=128 max-size-bytes=0 max-size-time=200000000 ! peer.sink_0 \
          {audio} ! audioconvert ! audioresample ! \
-         audio/x-raw,rate=48000,channels=1 ! queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream ! opusenc bitrate=32000 ! rtpopuspay pt={} ! \
-         application/x-rtp,media=audio,encoding-name=OPUS,payload={} ! queue max-size-buffers=128 max-size-bytes=0 max-size-time=200000000 ! peer.sink_1",
+         audio/x-raw,format=S16LE,rate=48000,channels=1{audio_tee} ! queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream ! opusenc bitrate=32000 ! rtpopuspay pt={} ! \
+         application/x-rtp,media=audio,encoding-name=OPUS,payload={} ! queue max-size-buffers=128 max-size-bytes=0 max-size-time=200000000 ! peer.sink_1 \
+         {analysis}",
         payloads.h264, payloads.h264, payloads.opus, payloads.opus
     )
 }
@@ -252,7 +273,8 @@ mod tests {
             // Require actual decoded dimensions. No videoscale element can
             // turn a lower-resolution camera frame into an apparent preset pass.
             assert!(pipeline.contains(&format!("jpegdec ! videorate drop-only=true ! video/x-raw,width={width},height={height},framerate=15/1")));
-            assert!(!pipeline.contains("videoscale"));
+            // Scaling is confined to the analysis branch, after main RTP output.
+            assert!(pipeline.find("peer.sink_1").unwrap() < pipeline.find("videoscale").unwrap());
             assert!(pipeline.contains("alsasrc name=microphone"));
             assert!(!pipeline.contains(path));
             assert!(!pipeline.contains("plughw:"));
@@ -384,9 +406,62 @@ mod tests {
             valid.replace("m=video 9", "m=video 0"),
             valid.replace("SAVPF 107", "SAVPF 108"),
             valid.replace("packetization-mode=1", "packetization-mode=0"),
-            format!("{valid}m=application 9 UDP/DTLS/SCTP webrtc-datachannel\n"),
+            format!(
+                "{valid}m=application 9 UDP/DTLS/SCTP webrtc-datachannel\nm=application 9 UDP/DTLS/SCTP webrtc-datachannel\n"
+            ),
         ] {
             assert!(PayloadTypes::from_offer(&invalid).is_err());
         }
+    }
+
+    #[test]
+    fn accepts_only_optional_trailing_data_channel_after_required_media() {
+        let valid = "m=video 9 UDP/TLS/RTP/SAVPF 107\na=rtpmap:107 H264/90000\na=fmtp:107 packetization-mode=1;profile-level-id=42e01f\nm=audio 9 UDP/TLS/RTP/SAVPF 109\na=rtpmap:109 opus/48000/2\n";
+        assert!(
+            PayloadTypes::from_offer(&format!(
+                "{valid}m=application 9 UDP/DTLS/SCTP webrtc-datachannel\n"
+            ))
+            .is_ok()
+        );
+        assert!(
+            PayloadTypes::from_offer(&format!(
+                "m=application 9 UDP/DTLS/SCTP webrtc-datachannel\n{valid}"
+            ))
+            .is_err()
+        );
+    }
+
+    #[test]
+    fn real_analysis_is_bounded_and_independent_of_encoder_rtp_queues() {
+        let source = SourceConfig::LinuxCapture(
+            LinuxCapture::new("/dev/video0", "plughw:CARD=Device,DEV=0").unwrap(),
+        );
+        let payloads = PayloadTypes {
+            h264: 108,
+            opus: 111,
+        };
+        let pipeline = media_pipeline(VideoPreset::Vga, payloads, &source);
+        assert!(
+            pipeline.contains(
+                "framerate=15/1 ! tee name=analysis_video_tee ! queue max-size-buffers=3"
+            )
+        );
+        assert!(pipeline.contains("format=S16LE,rate=48000,channels=1 ! tee name=analysis_audio_tee ! queue max-size-buffers=3"));
+        assert!(pipeline.contains("video/x-raw,format=GRAY8,width=320,height=180,framerate=5/1 ! appsink name=analysis_video"));
+        for sink in ["analysis_video", "analysis_audio"] {
+            assert!(pipeline.contains(&format!("appsink name={sink} emit-signals=true sync=false max-buffers=1 drop=true enable-last-sample=false")));
+        }
+        let main = pipeline.split("analysis_video_tee.").next().unwrap();
+        for payloader in ["rtph264pay", "rtpopuspay"] {
+            let rtp = main
+                .split_once(payloader)
+                .unwrap()
+                .1
+                .split("peer.sink_")
+                .next()
+                .unwrap();
+            assert!(!rtp.contains("leaky="));
+        }
+        assert!(!synthetic_pipeline(VideoPreset::Vga, payloads).contains("appsink"));
     }
 }

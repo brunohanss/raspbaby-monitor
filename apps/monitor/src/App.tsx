@@ -3,7 +3,6 @@ import {
   AudioLines,
   CameraOff,
   ChartNoAxesColumn,
-  Check,
   ChevronDown,
   CircleAlert,
   House,
@@ -26,7 +25,24 @@ import {
 } from "lucide-react";
 import { RaspberryMark } from "./components/RaspberryMark";
 import { AlertSoundSettings } from "./components/AlertSoundSettings";
-import { parseSignalingMessage } from "@raspbaby/protocol-client";
+import { ActivityStatistics } from "./components/ActivityStatistics";
+import {
+  parseSignalingMessage,
+  type TelemetryMessage,
+} from "@raspbaby/protocol-client";
+import {
+  addActivity,
+  emptyActivity,
+  loadActivity,
+  saveActivity,
+} from "./services/activity";
+import {
+  ActivityAlertPlayer,
+  activityAlertsEnabled,
+  activityAlertRepeatSeconds,
+  saveActivityAlertRepeatSeconds,
+  saveActivityAlertsEnabled,
+} from "./services/activityAlerts";
 import {
   connectCamera,
   disconnectCamera,
@@ -47,12 +63,6 @@ import {
 } from "./services/background";
 
 type Screen = "live" | "events" | "statistics" | "settings";
-interface SessionEvent {
-  id: number;
-  time: number;
-  label: string;
-  warning: boolean;
-}
 const initialStatus: ReceiverUpdate = {
   state: "idle",
   detail: "Connect your camera to start monitoring.",
@@ -87,13 +97,31 @@ export function App() {
   const receiver = useRef<MediaReceiver | null>(null);
   const statusRef = useRef(initialStatus);
   const statsRef = useRef<MediaStats>(emptyStats);
-  const eventSequence = useRef(0);
+  const alertPlayer = useRef<ActivityAlertPlayer | null>(null);
+  const [initialActivity] = useState(() => {
+    try {
+      return { state: loadActivity(), error: "" };
+    } catch {
+      return {
+        state: emptyActivity(),
+        error: "Saved activity could not be read. New events will appear here.",
+      };
+    }
+  });
+  const activityRef = useRef(initialActivity.state);
   const nativeSession = useRef<string | null>(null);
   const connectionGeneration = useRef(0);
   const [screen, setScreen] = useState<Screen>("live");
   const [status, setStatus] = useState(initialStatus);
   const [stats, setStats] = useState<MediaStats>(emptyStats);
-  const [events, setEvents] = useState<SessionEvent[]>([]);
+  const [activity, setActivity] = useState(initialActivity.state);
+  const [activityIssue, setActivityIssue] = useState(initialActivity.error);
+  const [telemetry, setTelemetry] = useState<TelemetryMessage | null>(null);
+  const [alertsEnabled, setAlertsEnabled] = useState(activityAlertsEnabled);
+  const [alertRepeatSeconds, setAlertRepeatSeconds] = useState(
+    activityAlertRepeatSeconds,
+  );
+  const [alertIssue, setAlertIssue] = useState("");
   const [offer, setOffer] = useState("");
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
@@ -112,38 +140,45 @@ export function App() {
   }
 
   useEffect(() => {
+    const alerts = new ActivityAlertPlayer({ onError: setAlertIssue });
+    alertPlayer.current = alerts;
     const service = new MediaReceiver({
       onUpdate: (update) => {
         if (["idle", "failed", "disconnected"].includes(update.state))
           releaseNativeCamera();
-        if (statusRef.current.state !== update.state) {
-          const warning =
-            update.state === "failed" || update.state === "disconnected";
-          const label =
-            update.state === "receiving"
-              ? "Camera connected"
-              : warning
-                ? "Camera connection lost"
-                : update.state === "idle"
-                  ? "Monitoring stopped"
-                  : update.state === "gathering"
-                    ? "Connecting to camera"
-                    : null;
-          if (label)
-            setEvents((current) =>
-              [
-                ...current,
-                {
-                  id: ++eventSequence.current,
-                  time: Date.now(),
-                  label,
-                  warning,
-                },
-              ].slice(-50),
-            );
-        }
+        if (["idle", "failed", "disconnected"].includes(update.state))
+          alerts.stop();
         statusRef.current = update;
         setStatus(update);
+      },
+      onTelemetry: (message) => {
+        setTelemetry(message);
+        if (!message) {
+          alerts.stop();
+          return;
+        }
+        void alerts.notifyActive({
+          motion: message.motion_active,
+          sound: message.sound_active,
+          timestamp_ms: message.timestamp_ms,
+        });
+        const result = addActivity(
+          activityRef.current,
+          message.device_id,
+          message.events,
+        );
+        if (!result.fresh.length) return;
+        activityRef.current = result.state;
+        setActivity(result.state);
+        try {
+          saveActivity(result.state);
+          setActivityIssue("");
+        } catch {
+          setActivityIssue(
+            "Local storage is unavailable. New activity is kept in memory until the app closes.",
+          );
+        }
+        for (const event of result.fresh) void alerts.notify(event);
       },
       onStats: (sample) => {
         statsRef.current = sample;
@@ -174,6 +209,7 @@ export function App() {
         stopFromNotification,
       );
       service.close();
+      alerts.dispose();
       releaseNativeCamera();
     };
   }, []);
@@ -190,6 +226,7 @@ export function App() {
   );
 
   async function generate() {
+    alertPlayer.current?.unlock();
     setBusy(true);
     setError("");
     setOffer("");
@@ -207,6 +244,7 @@ export function App() {
     }
   }
   async function apply() {
+    alertPlayer.current?.unlock();
     setBusy(true);
     setError("");
     try {
@@ -231,6 +269,7 @@ export function App() {
     setBusy(false);
   }
   async function connectToCamera() {
+    alertPlayer.current?.unlock();
     if (!isWindowsApp) {
       openConnection();
       return;
@@ -289,9 +328,9 @@ export function App() {
       );
   }
 
-  const audioLevel = stats.audioLevel ?? null;
+  const audioLevel = telemetry?.audio_level ?? stats.audioLevel ?? null;
   const soundAvailable = Boolean(
-    receiving && stats.audioAvailable && audioLevel !== null,
+    (telemetry || (receiving && stats.audioAvailable)) && audioLevel !== null,
   );
   const litBars =
     soundAvailable && audioLevel !== null
@@ -485,9 +524,16 @@ export function App() {
               <div>
                 <h2>Raspberry Pi Temperature</h2>
                 <p className="temperature-value">
-                  — <span>°C</span>
+                  {telemetry?.temperature_c == null
+                    ? "—"
+                    : telemetry.temperature_c.toFixed(1)}{" "}
+                  <span>°C</span>
                 </p>
-                <span className="sensor-note">Not reported</span>
+                <span className="sensor-note">
+                  {telemetry?.temperature_c == null
+                    ? "Not reported"
+                    : "Pi CPU temperature"}
+                </span>
               </div>
             </section>
             <section className="sensor-card sound-card">
@@ -523,8 +569,18 @@ export function App() {
               </div>
               <div>
                 <h2>Motion</h2>
-                <p className="sensor-state">Unavailable</p>
-                <span className="sensor-note">Detection is not enabled</span>
+                <p className="sensor-state">
+                  {telemetry
+                    ? telemetry.motion_active
+                      ? "Movement detected"
+                      : "No movement"
+                    : "Unavailable"}
+                </p>
+                <span className="sensor-note">
+                  {telemetry
+                    ? "Camera motion detector"
+                    : "Waiting for device telemetry"}
+                </span>
               </div>
             </section>
           </aside>
@@ -533,25 +589,33 @@ export function App() {
           <section className="content-screen" aria-labelledby="events-title">
             <div className="screen-heading">
               <div>
-                <p className="eyebrow">THIS SESSION</p>
+                <p className="eyebrow">CAMERA ACTIVITY</p>
                 <h2 id="events-title">Events</h2>
-                <p>Camera connection activity, all in one place.</p>
+                <p>Movement and sustained sound reported by your camera.</p>
               </div>
-              <span className="count-pill">{events.length} events</span>
+              <span className="count-pill">
+                {activity.events.length} recent events
+              </span>
             </div>
             <div className="events-panel">
-              {events.length ? (
-                [...events].reverse().map((event) => (
-                  <div className="event-row" key={event.id}>
-                    <span
-                      className={`event-symbol ${event.warning ? "warning" : ""}`}
-                    >
-                      {event.warning ? <CircleAlert /> : <Check />}
+              {activity.events.length ? (
+                [...activity.events].reverse().map((event) => (
+                  <div
+                    className="event-row"
+                    key={`${event.device_id}/${event.id}`}
+                  >
+                    <span className="event-symbol">
+                      {event.kind === "motion" ? <House /> : <AudioLines />}
                     </span>
                     <div>
-                      <h3>{event.label}</h3>
+                      <h3>
+                        {event.kind === "motion"
+                          ? "Movement detected"
+                          : "Sustained sound detected"}
+                      </h3>
                       <p>
-                        {new Date(event.time).toLocaleTimeString([], {
+                        {new Date(event.timestamp_ms).toLocaleDateString()} ·{" "}
+                        {new Date(event.timestamp_ms).toLocaleTimeString([], {
                           hour: "2-digit",
                           minute: "2-digit",
                           second: "2-digit",
@@ -565,69 +629,22 @@ export function App() {
                   <List />
                   <h3>No events yet</h3>
                   <p>
-                    Connection events will appear here when monitoring starts.
+                    Real movement and sound events will appear here when the
+                    camera reports them.
                   </p>
                 </div>
               )}
             </div>
             <p className="screen-footnote">
-              Events stay in this session. Motion and sound alerts are not
-              enabled yet.
+              {activityIssue ||
+                "Event metadata stays on this device. The latest 500 events are kept; no camera images or audio are saved."}
+              {telemetry?.dropped_events
+                ? ` The device reports ${telemetry.dropped_events} dropped events; counts may be incomplete.`
+                : ""}
             </p>
           </section>
         )}
-        {screen === "statistics" && (
-          <section
-            className="content-screen"
-            aria-labelledby="statistics-title"
-          >
-            <div className="screen-heading">
-              <div>
-                <p className="eyebrow">YOUR CONNECTION</p>
-                <h2 id="statistics-title">Statistics</h2>
-                <p>A closer look at the current camera stream.</p>
-              </div>
-              <span
-                className={`small-connection ${receiving ? "is-live" : ""}`}
-              >
-                <span className="status-dot" />
-                {statusLabel}
-              </span>
-            </div>
-            <div className="statistics-grid">
-              {[
-                ["Decoded frames", stats.frames.toLocaleString()],
-                [
-                  "Received media",
-                  `${(stats.bytes / 1024 / 1024).toFixed(2)} MB`,
-                ],
-                ["Packets lost", stats.packetsLost.toLocaleString()],
-                ["Video codec", stats.videoCodec ?? "Not received"],
-                [
-                  "Resolution",
-                  receiving && stats.width && stats.height
-                    ? `${stats.width} × ${stats.height}`
-                    : "Not received",
-                ],
-                [
-                  "Last video received",
-                  status.lastMediaAt
-                    ? new Date(status.lastMediaAt).toLocaleTimeString()
-                    : "Not received",
-                ],
-              ].map(([label, value]) => (
-                <div className="stat-tile" key={label}>
-                  <p>{label}</p>
-                  <strong>{value}</strong>
-                </div>
-              ))}
-            </div>
-            <p className="screen-footnote">
-              Statistics use received media. Device temperature and heartbeat
-              are not available yet.
-            </p>
-          </section>
-        )}
+        {screen === "statistics" && <ActivityStatistics activity={activity} />}
         {screen === "settings" && (
           <section
             className="content-screen settings-screen"
@@ -762,7 +779,105 @@ export function App() {
                 </p>
               )}
             </div>
-            <AlertSoundSettings />
+            <section className="settings-panel" style={{ marginTop: 24 }}>
+              <div className="setting-row">
+                <div className="setting-label">
+                  <AudioLines />
+                  <div>
+                    <h3>Activity alerts</h3>
+                    <p>
+                      Murloc plays for movement or sound, even when camera sound
+                      is muted.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  className={`setting-switch ${alertsEnabled ? "is-on" : ""}`}
+                  role="switch"
+                  aria-checked={alertsEnabled}
+                  aria-label="Enable activity alerts"
+                  onClick={() => {
+                    try {
+                      const enabled = !alertsEnabled;
+                      saveActivityAlertsEnabled(enabled);
+                      setAlertsEnabled(enabled);
+                      if (enabled) alertPlayer.current?.unlock();
+                      else alertPlayer.current?.stop();
+                    } catch {
+                      setAlertIssue(
+                        "Could not save the activity alert preference.",
+                      );
+                    }
+                  }}
+                >
+                  <span />
+                </button>
+              </div>
+              <div className="connection-body">
+                <button
+                  className="subtle-button"
+                  onClick={() => alertPlayer.current?.unlock()}
+                >
+                  Allow alert sounds
+                </button>
+                <p
+                  className="connection-help"
+                  style={{ marginTop: 14, marginBottom: 0 }}
+                >
+                  Movement OR sound can trigger Murloc. It repeats while either
+                  remains active, with no overlapping clips. Quiet or
+                  unavailable telemetry stops repeats.
+                </p>
+                <label
+                  className="setting-value"
+                  htmlFor="activity-alert-repeat"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    flexWrap: "wrap",
+                    gap: 12,
+                    marginTop: 18,
+                  }}
+                >
+                  Repeat interval · {alertRepeatSeconds} seconds
+                  <input
+                    id="activity-alert-repeat"
+                    aria-label="Activity alert repeat interval"
+                    type="range"
+                    min="5"
+                    max="60"
+                    step="1"
+                    value={alertRepeatSeconds}
+                    onChange={(event) => {
+                      try {
+                        const seconds = Number(event.target.value);
+                        saveActivityAlertRepeatSeconds(seconds);
+                        setAlertRepeatSeconds(seconds);
+                        setAlertIssue("");
+                      } catch {
+                        setAlertIssue(
+                          "Could not save the repeat interval. Choose 5–60 seconds.",
+                        );
+                      }
+                    }}
+                    style={{
+                      width: 180,
+                      maxWidth: "100%",
+                      accentColor: "#a276ff",
+                    }}
+                  />
+                </label>
+                {alertIssue && (
+                  <p className="setting-message" role="alert">
+                    {alertIssue}
+                  </p>
+                )}
+              </div>
+            </section>
+            <AlertSoundSettings
+              onChange={() => setAlertsEnabled(activityAlertsEnabled())}
+              onPreview={() => alertPlayer.current?.unlock()}
+            />
             <details
               className="connection-settings"
               open={advancedOpen}

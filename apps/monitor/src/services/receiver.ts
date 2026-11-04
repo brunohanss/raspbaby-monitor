@@ -1,4 +1,9 @@
-import { createOffer, parseSignalingMessage } from "@raspbaby/protocol-client";
+import {
+  createOffer,
+  parseSignalingMessage,
+  parseTelemetryMessage,
+  type TelemetryMessage,
+} from "@raspbaby/protocol-client";
 
 export type ReceiverState =
   | "idle"
@@ -32,6 +37,7 @@ interface ReceiverOptions {
   onUpdate: (update: ReceiverUpdate) => void;
   onStream: (stream: MediaStream | null) => void;
   onStats: (stats: MediaStats) => void;
+  onTelemetry?: (message: TelemetryMessage | null) => void;
   peerFactory?: () => RTCPeerConnection;
   streamFactory?: () => MediaStream;
   iceTimeoutMs?: number;
@@ -57,6 +63,34 @@ export class MediaReceiver {
   private visibilityRevision = 0;
   private visibility: VisibilitySource | undefined;
   private stats: MediaStats = { frames: 0, bytes: 0, packetsLost: 0 };
+  private telemetryChannel: RTCDataChannel | null = null;
+  private telemetryAt: number | null = null;
+  private telemetrySequence = -1;
+  private telemetryDevice: string | null = null;
+
+  private clearTelemetry() {
+    this.telemetryAt = null;
+    this.options.onTelemetry?.(null);
+  }
+
+  private receiveTelemetry(peer: RTCPeerConnection, raw: unknown) {
+    if (this.peer !== peer || typeof raw !== "string") return;
+    try {
+      const message = parseTelemetryMessage(raw);
+      if (
+        (this.telemetryDevice !== null &&
+          message.device_id !== this.telemetryDevice) ||
+        message.sequence <= this.telemetrySequence
+      )
+        return;
+      this.telemetryDevice = message.device_id;
+      this.telemetrySequence = message.sequence;
+      this.telemetryAt = Date.now();
+      this.options.onTelemetry?.(message);
+    } catch {
+      // Invalid optional telemetry must not interrupt the media connection.
+    }
+  }
 
   constructor(private readonly options: ReceiverOptions) {
     this.visibility =
@@ -164,6 +198,15 @@ export class MediaReceiver {
         );
         if (preferred?.length) transceiver.setCodecPreferences(preferred);
       }
+      const channel = peer.createDataChannel("raspbaby-monitor", {
+        ordered: true,
+      });
+      this.telemetryChannel = channel;
+      channel.onmessage = (event) => this.receiveTelemetry(peer, event.data);
+      channel.onclose = () => {
+        if (this.peer === peer && this.telemetryChannel === channel)
+          this.clearTelemetry();
+      };
       await peer.setLocalDescription(await peer.createOffer());
       await this.gather(peer);
       if (this.peer !== peer) throw new Error("Session stopped.");
@@ -244,6 +287,8 @@ export class MediaReceiver {
 
   private async sample(peer: RTCPeerConnection) {
     try {
+      if (this.telemetryAt !== null && Date.now() - this.telemetryAt > 10000)
+        this.clearTelemetry();
       const visibilityRevision = this.visibilityRevision;
       const reports = await peer.getStats();
       if (peer !== this.peer || visibilityRevision !== this.visibilityRevision)
@@ -361,6 +406,16 @@ export class MediaReceiver {
     this.poll = undefined;
     const peer = this.peer;
     this.peer = null;
+    const channel = this.telemetryChannel;
+    this.telemetryChannel = null;
+    if (channel) {
+      channel.onmessage = null;
+      channel.onclose = null;
+      channel.close();
+    }
+    this.telemetrySequence = -1;
+    this.telemetryDevice = null;
+    this.clearTelemetry();
     if (peer) {
       peer.ontrack = null;
       peer.onconnectionstatechange = null;

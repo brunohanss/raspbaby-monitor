@@ -72,7 +72,8 @@ playback operation.
 Install the MSVC x86-64 GStreamer runtime and development files on Windows.
 Use a full plugin installation. This spike needs `webrtcbin`, libnice, DTLS,
 SRTP, `videotestsrc`, `audiotestsrc`, `x264enc`, `h264parse`, `rtph264pay`,
-`opusenc`, and `rtpopuspay`. See the official
+`opusenc`, and `rtpopuspay`. Real monitoring also uses `appsink`, `videoscale`,
+`videoconvert`, and `videorate`. See the official
 [Windows installation guide](https://gstreamer.freedesktop.org/documentation/installing/on-windows.html).
 Check the actual install directory; do not assume that all hosts use this path.
 
@@ -91,11 +92,12 @@ runtime plugin packages. Debian packages `alsasrc` separately as `gstreamer1.0-a
 The native CI job lists the exact package names for
 its Ubuntu runner. Those packages are not a tested Raspberry Pi OS image pin.
 
-Start the receiver and select **Create offer**. Copy the complete JSON line.
+Open **Settings > Advanced connection** and select **Create offer**. Copy the complete JSON line.
 Paste it into the sender terminal. Copy the answer JSON line from stdout and
 paste it into the receiver. Select **Apply answer**. Unmute audio to check the
 test tone. Keep the sender terminal open. A second input line, EOF, Ctrl+C, or
-the 30-minute session limit stops the sender. Pass `--hd` after `--stdio-spike`
+the synthetic test's 30-minute session limit stops the sender. Real device
+monitoring has no 30-minute limit. Pass `--hd` after `--stdio-spike`
 to test 1280×720. The default is 640×480 at 15 FPS.
 
 Do not pipe an offer file into the sender: EOF stops the session. Do not save
@@ -125,8 +127,45 @@ and camera-native H.264 are not implemented in this spike. Verify capabilities
 with `v4l2-ctl --list-formats-ext` and `arecord -l` before starting capture.
 
 The single build job and disabled development debug information limit build
-memory on the available Pi 3B+. They do not change the media codec. Do not
+memory on the available Pi 3B+. The workspace development profile compiles
+`raspbaby-detection` at optimization level 3 to reduce analysis cost on the Pi.
+These settings do not change the media codec. New resource measurements are
+pending for the optimized detection build. Do not
 interpret a development-build measurement as a production release benchmark.
+
+## Real monitoring metadata and alerts
+
+The native Windows **Connect camera** action uses existing trusted OpenSSH
+keys and `known_hosts`. Set the hostname/private IPv4 address and SSH username
+in Settings. The Pi daemon must already exist at
+`/home/<username>/raspbaby-feasibility/target/debug/raspbaby-daemon` with the
+tested camera and ALSA devices. The app does not install the daemon or manage
+the USB host driver. See [persistent Pi compatibility](persistent-pio-proposal.md).
+
+Before creating its offer, the receiver creates an ordered, reliable data
+channel named `raspbaby-monitor`. Real capture tees decoded video to a bounded
+320×180 GRAY8, 5 FPS analysis branch and 48 kHz mono audio to 100 ms RMS windows.
+The sender publishes current levels/activity and event metadata about every
+200 ms; it reads Pi CPU temperature once per second. It does not send raw
+analysis frames or PCM through the channel. SSH still carries only the bounded
+offer/answer signaling exchange. There is no new control listener.
+
+Motion uses smoothing and confirmation. Sound uses a 300 ms confirmation,
+minimum RMS 0.025, and a learned-noise threshold of twice the floor plus 0.005.
+Both default detector cooldowns are zero: each new confirmed episode can add
+an event. This does not make each active sample an event. Sound activity is
+not cry recognition. Synthetic sources have no detection branches.
+
+The client stores at most 500 local event rows and 90 nightly summaries.
+Graphs use 18:00–08:00 in the client's local time and a seven-night view.
+Storage contains event metadata, not recordings. Closing all receiver sessions
+ends this session-based analysis; no unattended Pi event archive is provided.
+
+Camera **Mute** changes microphone playback only. The meter and Pi analysis
+continue. The separately imported Murloc clip plays while motion **or** sound
+is active, repeats at the configured 5–60 second interval (default 5), and
+never overlaps itself. Repeat playback does not increment history counts.
+Import the user's exact clip locally; do not add it to the repository.
 
 For an automated remote test, first establish SSH trust and key authentication.
 Do not put a password in the command or an environment file. In PowerShell:
@@ -203,6 +242,7 @@ audible output or audio/video synchronization.
 
 ## Deferred build commands
 
-ARM64 daemon, installation package, and Pi image builds are not configured yet.
+Automated ARM64 release artifacts, installation packages, and Pi image builds
+are not configured yet. The ARM64 development daemon has been built on the Pi.
 Do not publish placeholder artifacts. Validate RB-001 and RB-002, select and pin
 the tested OS image, then implement the packaging backlog in dependency order.

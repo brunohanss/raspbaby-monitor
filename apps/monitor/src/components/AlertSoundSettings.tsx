@@ -8,7 +8,13 @@ import {
   type AlertSoundSettings as SoundSettings,
 } from "../services/alertSound";
 
-export function AlertSoundSettings() {
+export function AlertSoundSettings({
+  onChange,
+  onPreview,
+}: {
+  onChange?: () => void;
+  onPreview?: () => void;
+}) {
   const [initial] = useState(() => {
     try {
       return { settings: loadAlertSoundSettings(), error: "" };
@@ -46,6 +52,7 @@ export function AlertSoundSettings() {
     saveAlertSoundSettings(next);
     setSettings(next);
     setError("");
+    onChange?.();
   }
   async function select(file: File) {
     setBusy(true);
@@ -62,6 +69,7 @@ export function AlertSoundSettings() {
     }
   }
   async function preview() {
+    onPreview?.();
     const player = audio.current;
     if (!player || !settings.clip) return;
     stopPreview();
@@ -95,8 +103,8 @@ export function AlertSoundSettings() {
       <div className="connection-body">
         <p className="connection-help">
           Import your Murloc clip as WAV, MP3, or OGG (up to 1 MiB). It stays on
-          this device. Automatic alerts will be available when detection is
-          implemented.
+          this device. Movement and sound alerts use the same clip when camera
+          telemetry is available.
         </p>
         <p
           className="setting-value"
@@ -172,7 +180,7 @@ export function AlertSoundSettings() {
             marginTop: 22,
           }}
         >
-          Preview volume · {Math.round(settings.volume * 100)}%
+          Alert and preview volume · {Math.round(settings.volume * 100)}%
           <input
             id="alert-sound-volume"
             type="range"

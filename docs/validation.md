@@ -1,5 +1,44 @@
 # Initial validation
 
+## Monitoring and installation update: 2026-11-04
+
+- The Pi now sends CPU temperature, microphone RMS level, motion state, sound
+  state, and confirmed activity events through the existing WebRTC session.
+  Live Windows telemetry matched the Pi thermal reading. Sound levels changed
+  while microphone playback remained muted.
+- The user confirmed the final sound-OR-motion behavior works. Native Windows
+  instrumentation recorded the selected 2.844-second clip with microphone
+  playback muted. Motion-only repeats were 5.015 and 5.048 seconds apart.
+  A retained activity snapshot contained 12 motion and 5 sound events across
+  the real tests. Repeat notifications do not add history events.
+- The native Android emulator used an external local RTC fixture. Motion-only
+  repeats were 5.144 seconds apart. Sound-only repeats after Home were 5.147
+  seconds apart, with microphone playback muted. Quiet, stale, and missing
+  telemetry stopped repeats. Four clip starts produced only two activity
+  events. Original emulator history and settings were restored afterward.
+  Emulator host audio was off; physical Android audible output is not established.
+- Night graph, local-time boundaries, deduplication, persisted totals, and
+  metadata retention passed browser and unit checks. They do not establish an
+  overnight observation or counts during disconnected periods.
+- All 31 default Rust tests and Clippy passed on Windows. The native Windows
+  media/daemon feature tests passed, and all 34 native daemon/media/detector/
+  protocol tests passed on the Pi. The frontend passed 33 tests, type/lint,
+  formatting, production build, and activity UI integration with real local RTC.
+- The optimized detector development build reduced a short Pi process CPU
+  snapshot from about 146% to 83.5%, with one core equal to 100%. Final RSS was
+  49,404 KiB. CPU temperature was 55.844 °C. `get_throttled=0x80000` records a
+  prior soft-temperature-limit event; no current limit bit was set. These are
+  snapshots, not a soak benchmark.
+- A per-user NSIS development installer was built and installed on Windows.
+  Desktop and Start menu shortcuts, uninstall registration, and the installed
+  process path were verified. The GUI PE subsystem is 2, so no console opens.
+  The installed executable differs from the built executable only in Tauri's
+  expected three-byte bundle marker (`UNK` to `NSS`). Debugging ports were closed.
+
+The user-requested monitoring phase is recorded in
+[ADR 0005](decisions/0005-monitoring-events.md). Remaining feasibility and
+production checks stay open.
+
 ## Follow-up: 2026-11-04
 
 The results below describe the initial foundation. New validation supersedes

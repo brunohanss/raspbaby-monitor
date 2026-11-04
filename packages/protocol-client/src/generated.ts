@@ -5,3 +5,17 @@ export const PROTOCOL_VERSION = 1 as const;
 export const MAX_SDP_BYTES = 65536;
 export const MAX_MESSAGE_BYTES = 98304;
 export const MAX_SESSION_ID_BYTES = 64;
+export type TelemetryKind = "monitor.telemetry";
+export type TelemetryEventKind = "motion" | "sound";
+export type TelemetryEvent = { id: string, kind: TelemetryEventKind, timestamp_ms: number, };
+export type TelemetryMessage = { protocol_version: number, type: TelemetryKind, device_id: string, sequence: number, timestamp_ms: number,
+/**
+ * Pi CPU temperature when the source is the onboard thermal interface.
+ * This does not measure room or body temperature.
+ */
+temperature_c: number | null, audio_level: number | null, motion_active: boolean, sound_active: boolean, dropped_events: number, events: Array<TelemetryEvent>, };
+export const MAX_TELEMETRY_BYTES = 8192;
+export const MAX_TELEMETRY_EVENTS = 32;
+export const MAX_TELEMETRY_ID_BYTES = 64;
+export const MAX_TELEMETRY_TIMESTAMP_MS = 4102444800000;
+export const MAX_SAFE_COUNTER = 9007199254740991;

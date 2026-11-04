@@ -14,7 +14,12 @@ pnpm tauri dev
 pnpm tauri build --debug --no-bundle
 ```
 
-`pnpm dev` starts the browser UI at `http://127.0.0.1:1420`. `pnpm tauri dev` starts the Windows WebView2 shell. Install the Rust MSVC toolchain, Visual Studio C++ build tools, and WebView2 before you start the shell. `cargo check -p raspbaby-monitor-app` checks the Windows shell without opening a window. The bundle configuration is disabled until platform validation is complete.
+`pnpm dev` starts the browser UI at `http://127.0.0.1:1420`. `pnpm tauri dev` starts the Windows WebView2 shell. Install the Rust MSVC toolchain, Visual Studio C++ build tools, and WebView2 before you start the shell. `cargo check -p raspbaby-monitor-app` checks the Windows shell without opening a window.
+
+Build the tested development installer with `pnpm tauri build --debug --bundles nsis`.
+The Windows installer runs for the current user and adds Start menu and desktop
+shortcuts. It also registers a Windows uninstall entry. The GUI executable does
+not open a console. This installer does not imply production readiness.
 
 ## Windows camera connection
 
@@ -27,6 +32,25 @@ that daemon and the capture devices must already be ready. It does not install
 software or activate the experimental USB driver. See the
 [root setup instructions](../../README.md) and
 [Pi USB compatibility scope](../../docs/pi3-usb-compatibility.md).
+
+## Monitoring and alerts
+
+Real monitoring receives Pi CPU temperature, microphone RMS, motion/sound
+activity, and events over the ordered, reliable `raspbaby-monitor` WebRTC data
+channel. Signaling still uses SSH or the manual exchange below. Synthetic
+sources emit no detections. Real sessions have no 30-minute limit; synthetic
+tests retain that limit.
+
+History is local to the client: at most 500 event rows and 90 nightly summaries,
+with 18:00–08:00 local-time graphs and a seven-night view. It records confirmed
+episodes, not each repeated alert. It does not backfill periods with no session.
+
+Camera **Mute** changes microphone playback only; analysis and meters continue.
+Import the selected Murloc clip in Settings. It plays while motion **or** sound
+is active, repeats every five seconds by default (configurable 5–60 seconds),
+and never overlaps itself. Repeats do not add history events. This is sound
+activity detection, not cry recognition. See the
+[monitoring development guide](../../docs/development.md#real-monitoring-metadata-and-alerts).
 
 ## Manual media test
 

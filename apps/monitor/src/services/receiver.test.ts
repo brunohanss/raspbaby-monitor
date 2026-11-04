@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import type { TelemetryMessage } from "@raspbaby/protocol-client";
 import {
   MediaReceiver,
   type MediaStats,
@@ -14,6 +15,12 @@ class FakeVisibility extends EventTarget {
 }
 
 class FakePeer extends EventTarget {
+  channel = {
+    onmessage: null as ((event: { data: unknown }) => void) | null,
+    onclose: null as (() => void) | null,
+    close: vi.fn(),
+  };
+  createDataChannel = vi.fn(() => this.channel);
   iceGatheringState = "complete";
   connectionState = "new";
   localDescription: { sdp: string } | null = null;
@@ -71,6 +78,9 @@ describe("manual media receiver", () => {
   let updates: ReceiverUpdate[];
   let measured: MediaStats[];
   let visibility: FakeVisibility;
+  let onTelemetry: ReturnType<
+    typeof vi.fn<(message: TelemetryMessage | null) => void>
+  >;
   let onStream: ReturnType<typeof vi.fn<(stream: MediaStream | null) => void>>;
   let stop: ReturnType<typeof vi.fn<() => void>>;
   beforeEach(() => {
@@ -83,6 +93,7 @@ describe("manual media receiver", () => {
     measured = [];
     visibility = new FakeVisibility();
     onStream = vi.fn<(stream: MediaStream | null) => void>();
+    onTelemetry = vi.fn<(message: TelemetryMessage | null) => void>();
     stop = vi.fn<() => void>();
     receiver = new MediaReceiver({
       peerFactory: () => peer as unknown as RTCPeerConnection,
@@ -94,6 +105,7 @@ describe("manual media receiver", () => {
       onUpdate: (update) => updates.push(update),
       onStream,
       onStats: (stats) => measured.push(stats),
+      onTelemetry,
       iceTimeoutMs: 100,
       visibilitySource: visibility,
     });
@@ -113,6 +125,54 @@ describe("manual media receiver", () => {
       ["audio", { direction: "recvonly" }],
     ]);
     expect(updates.at(-1)?.state).toBe("awaiting-answer");
+    expect(peer.createDataChannel).toHaveBeenCalledWith("raspbaby-monitor", {
+      ordered: true,
+    });
+  });
+
+  it("accepts ordered Pi telemetry, ignores invalid and replayed messages, and clears stale readings", async () => {
+    const offer = JSON.parse(await receiver.start());
+    await receiver.accept(JSON.stringify({ ...offer, type: "webrtc.answer" }));
+    const message = {
+      protocol_version: 1,
+      type: "monitor.telemetry",
+      device_id: "pi-test",
+      sequence: 1,
+      timestamp_ms: Date.now(),
+      temperature_c: 51.3,
+      audio_level: 0.6,
+      motion_active: true,
+      sound_active: false,
+      dropped_events: 0,
+      events: [{ id: "motion-1", kind: "motion", timestamp_ms: Date.now() }],
+    };
+    peer.channel.onmessage?.({ data: JSON.stringify(message) });
+    expect(onTelemetry).toHaveBeenLastCalledWith(message);
+    const accepted = onTelemetry.mock.calls.length;
+    peer.channel.onmessage?.({ data: JSON.stringify(message) });
+    peer.channel.onmessage?.({ data: "invalid" });
+    peer.channel.onmessage?.({
+      data: JSON.stringify({
+        ...message,
+        sequence: 2,
+        device_id: "another-pi",
+      }),
+    });
+    expect(onTelemetry).toHaveBeenCalledTimes(accepted);
+    for (let second = 0; second < 11; second++) {
+      peer.decoded++;
+      peer.videoBytes += 100;
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(onTelemetry).toHaveBeenLastCalledWith(null);
+    expect(peer.close).not.toHaveBeenCalled();
+    peer.channel.onmessage?.({
+      data: JSON.stringify({ ...message, sequence: 2 }),
+    });
+    expect(onTelemetry).toHaveBeenLastCalledWith({ ...message, sequence: 2 });
+    receiver.close();
+    expect(peer.channel.close).toHaveBeenCalled();
+    expect(onTelemetry).toHaveBeenLastCalledWith(null);
   });
 
   it("rejects wrong sessions and message kinds before setting remote SDP", async () => {

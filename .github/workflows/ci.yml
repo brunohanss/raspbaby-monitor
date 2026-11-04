@@ -52,10 +52,11 @@ jobs:
       - run: pnpm --filter @raspbaby/monitor exec playwright install --with-deps chromium
       - run: pnpm build
       - run: cargo build --locked -p raspbaby-daemon --features gstreamer-runtime
-      - name: Check synthetic media in Chromium
+      - name: Check media, activity, and muted-camera alerts in Chromium
         env:
           RASPBABY_SPIKE_BIN: ${{ github.workspace }}/target/debug/raspbaby-daemon
           RASPBABY_TEST_URL: http://127.0.0.1:1421
+          RASPBABY_ALERT_CLIP: ${{ github.workspace }}/target/ci-alert-tone.wav
         run: |
           pnpm --filter @raspbaby/monitor exec vite preview --host 127.0.0.1 --port 1421 &
           preview_pid=$!
@@ -65,6 +66,9 @@ jobs:
             sleep 1
           done
           pnpm --filter @raspbaby/monitor test:media
+          pnpm --filter @raspbaby/monitor exec node scripts/ui-check.mjs
+          python3 -c "import math,struct,wave; p=wave.open('target/ci-alert-tone.wav','wb'); p.setparams((1,2,24000,0,'NONE','not compressed')); p.writeframes(b''.join(struct.pack('<h',int(3000*math.sin(2*math.pi*440*i/24000))) for i in range(4800))); p.close()"
+          pnpm --filter @raspbaby/monitor exec node scripts/activity-ui-check.mjs
 
   frontend:
     runs-on: ubuntu-24.04

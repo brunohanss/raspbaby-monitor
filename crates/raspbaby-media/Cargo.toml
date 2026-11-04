@@ -6,10 +6,12 @@ license.workspace = true
 
 [features]
 default = []
-gstreamer-runtime = ["dep:gstreamer", "dep:gstreamer-webrtc", "dep:gstreamer-sdp"]
+gstreamer-runtime = ["dep:gstreamer", "dep:gstreamer-webrtc", "dep:gstreamer-sdp", "dep:raspbaby-detection", "dep:serde_json"]
 
 [dependencies]
 raspbaby-protocol = { path = "../raspbaby-protocol" }
+raspbaby-detection = { path = "../raspbaby-detection", optional = true }
+serde_json = { version = "1", optional = true }
 gstreamer = { version = "0.24", features = ["v1_22"], optional = true }
 gstreamer-webrtc = { version = "0.24", features = ["v1_22"], optional = true }
 gstreamer-sdp = { version = "0.24", features = ["v1_22"], optional = true }

@@ -7,6 +7,7 @@ import {
 } from "./generated";
 
 export * from "./generated";
+export { parseTelemetryMessage } from "./telemetry";
 
 const byteLength = (text: string): number => new TextEncoder().encode(text).length;
 

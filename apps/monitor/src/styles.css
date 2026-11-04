@@ -977,6 +977,78 @@ textarea {
   margin-top: 15px;
   margin-bottom: 0;
 }
+.night-picker {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 14px;
+  color: #bfb8d4;
+  font-size: 13px;
+}
+.night-picker input {
+  border: 1px solid #44405f;
+  background: #191d2b;
+  color: #e8e2f8;
+  border-radius: 10px;
+  padding: 10px;
+  font: inherit;
+}
+.activity-totals {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin: 20px 0;
+}
+.activity-chart {
+  border: 1px solid #393d58;
+  border-radius: 23px;
+  padding: 20px 14px;
+  background: #1c2031ba;
+}
+.activity-chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.activity-chart > p {
+  color: #a3a7c4;
+  font-size: 12px;
+  text-align: center;
+}
+.chart-legend {
+  display: flex;
+  justify-content: flex-end;
+  gap: 20px;
+  margin: 0 15px 10px;
+  font-size: 12px;
+}
+.motion-key {
+  color: #b99aff;
+}
+.sound-key {
+  color: #68d6b0;
+}
+.night-summary-title {
+  font-size: 17px;
+  font-weight: 550;
+  margin-top: 28px;
+}
+.night-summary {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  text-align: left;
+}
+.night-summary th,
+.night-summary td {
+  padding: 15px 18px;
+  border-bottom: 1px solid #34374b;
+}
+.night-summary th {
+  font-weight: 500;
+  color: #bfb8d4;
+}
+.night-summary td {
+  color: #d8d4e9;
+}
 @media (min-width: 1700px) {
   .monitor-layout {
     grid-template-columns: minmax(0, 1fr) 400px;

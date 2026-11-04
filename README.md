@@ -18,8 +18,9 @@ Boot backups, computer export, and actual rollback were verified. This is not
 a general Pi 4 solution or a product release. See the
 [camera report](docs/real-camera-validation.md) and
 [persistent compatibility setup](docs/persistent-pio-proposal.md).
-The media gate remains open. Product pairing, discovery, detection, alerts,
-and production installation remain pending.
+The media gate remains open. Basic motion/sound monitoring and local alerts
+are implemented at the user's request. Product pairing, discovery, automatic
+reconnect, and production installation remain pending.
 See the [feasibility report](docs/feasibility.md) for the open checks.
 
 ![Monitor interface before a camera connects](docs/assets/monitor-ui.png)
@@ -40,9 +41,39 @@ Read [development](docs/development.md) for setup and current connection steps.
 
 Settings includes a local Murloc sound import, preview, and volume control.
 Use the exact [user-selected clip](https://www.youtube.com/watch?v=qMPpnCvCZvw)
-as a WAV, MP3, or OGG file up to 1 MiB. One selected sound will be used for
-motion and sound-activity alerts. Imported audio stays on that client and is
-not included in this repository. Automatic alert triggers await detection.
+as a WAV, MP3, or OGG file up to 1 MiB. The selected sound plays when either
+live motion or live sound activity is active. It repeats every five seconds
+by default; Settings permits 5–60 seconds. Playback never overlaps. Repeats
+do not add history events. Imported audio stays on that client and is not
+included in this repository. Camera **Mute** affects microphone playback only;
+analysis, meters, and the separate activity-alert sound continue.
+
+Real Pi capture analyzes grayscale video at 320×180 and 5 FPS, and microphone
+RMS in 100 ms windows. The temperature card reports Pi CPU temperature, not
+room temperature. Metadata travels over the ordered, reliable WebRTC
+`raspbaby-monitor` data channel; SSH signaling is unchanged. Synthetic tests
+do not emit detections. This is activity detection, not cry recognition.
+Real monitoring has no 30-minute session limit; synthetic tests retain it.
+
+History stays on each client, with at most 500 event rows and 90 nightly
+summaries. Graphs cover 18:00–08:00 local time and seven nights. Counts record
+confirmed activity episodes, independently of alert repeats. History does not
+provide events from periods when no receiver session was running.
+
+## Windows installer
+
+After installing the development prerequisites below, build the Windows
+installer for the current tested development version:
+
+```powershell
+pnpm tauri build --debug --bundles nsis
+```
+
+The setup executable is in `target/debug/bundle/nsis`. It installs for the
+current user and adds **Raspbaby Monitor** to the Start menu and desktop.
+Use either shortcut to open it. Closing the window hides it to the tray;
+**Quit** stops monitoring. Windows Settings can uninstall the application.
+The installer is a development build, not a production release.
 
 ## Start development
 
@@ -91,6 +122,8 @@ flowchart LR
   T -->|Offer through local stdio or SSH| D[Rust stdio spike]
   D -->|Answer through the same channel| T
   D --> W
+  S -->|Real capture only| A[Motion, sound RMS, and Pi CPU temperature]
+  A -->|Ordered reliable WebRTC metadata| T
 ```
 
 The spike opens no HTTP or WebSocket control listener. It does not use public
@@ -102,7 +135,7 @@ authenticated control must be implemented before network product use.
 - `crates/raspbaby-media`: Synthetic and Linux capture sources, pipeline configuration, and optional native runtime.
 - `crates/raspbaby-daemon`: Bounded standard-input signaling experiment.
 - `crates/raspbaby-protocol`: Validated versioned messages and TypeScript generation.
-- `crates/raspbaby-detection`: Reserved crate; detection is deferred by the media gate.
+- `crates/raspbaby-detection`: Bounded motion and sound-activity analysis.
 - `apps/monitor`: Shared React, TypeScript, Tailwind, and Tauri receiver.
 - `packages/protocol-client`: Generated contract and runtime input validation.
 - `scripts/probe_pi.py`: Read-only Pi capability probe.

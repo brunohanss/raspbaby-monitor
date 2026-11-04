@@ -44,9 +44,7 @@ fn run() -> Result<(), Box<dyn Error>> {
         let (session, answer) = MediaSession::answer(&offer, options.preset, &options.source)?;
         println!("{}", serde_json::to_string(&answer)?);
         io::stdout().flush()?;
-        eprintln!(
-            "Answer ready. Apply it in the receiver. Close stdin to stop. Maximum session: 30 minutes."
-        );
+        eprintln!("Answer ready. Apply it in the receiver. Close stdin to stop.");
         // A bounded reader thread allows bus failures to end the session even while stdin is idle.
         drop(input);
         let (sender, receiver) = std::sync::mpsc::sync_channel(1);
@@ -62,7 +60,9 @@ fn run() -> Result<(), Box<dyn Error>> {
                 Err(std::sync::mpsc::RecvTimeoutError::Timeout) => (),
             }
             session.check_bus()?;
-            if start.elapsed() >= Duration::from_secs(30 * 60) {
+            if matches!(options.source, SourceConfig::Synthetic)
+                && start.elapsed() >= Duration::from_secs(30 * 60)
+            {
                 eprintln!("Spike session time limit reached.");
                 break;
             }

@@ -2,6 +2,42 @@
 
 Status: In progress. The media gate is open.
 
+## User-approved monitoring follow-up
+
+The user explicitly requested real activity monitoring while the broader media
+gate remains open. The sender now analyzes real decoded GRAY8 video at 320×180
+and 5 FPS, and 48 kHz mono microphone RMS in 100 ms windows. Pi CPU temperature,
+current activity, levels, and event metadata use the ordered, reliable WebRTC
+`raspbaby-monitor` data channel. Existing SSH signaling is unchanged. Synthetic
+sources do not produce detections; real sessions no longer have the synthetic
+test's 30-minute limit.
+
+The initial Pi/Windows live check received CPU temperature 52.078 °C and
+microphone RMS values of approximately 0.031–0.113 while the camera video
+element remained muted. A real motion event triggered the locally imported
+2.844-second Murloc clip, and the user confirmed hearing one playback. This is
+initial real-input evidence, not validation of the later repeat policy.
+
+The updated client policy plays while motion **or** sound is active, repeats
+at a 5–60 second interval (default 5), and prevents overlap. Detector cooldowns
+default to zero so every new confirmed episode can be counted; repeat sounds
+do not add events. Sound confirmation defaults to 300 ms with minimum RMS
+0.025 and a noise threshold of twice the learned floor plus 0.005. This is not
+cry recognition. Camera mute affects playback only, not the meter or analysis.
+The updated OR/repeat policy passed client fixture checks; final live numbers
+will be recorded separately.
+
+Client history is bounded to 500 event rows and 90 nightly summaries. Graphs
+cover 18:00–08:00 local time and seven nights. No media is stored by monitoring;
+the imported alert clip stays local. There is no Pi event backfill for periods
+without a receiver session. The Pi development profile now optimizes the
+detection crate at level 3; new resource measurements are pending. Earlier
+resource samples below predate this analysis and cannot establish its cost.
+
+Product pairing, discovery, automatic reconnect, physical microphone playback,
+audio/video synchronization, multiple clients, and long-running acceptance
+remain open. Implemented monitoring does not close the media gate.
+
 ## Evidence rules
 
 Record the commit, host, OS, GStreamer version, plugin list, source, receiver,
