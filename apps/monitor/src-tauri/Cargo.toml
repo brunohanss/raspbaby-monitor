@@ -14,3 +14,18 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+tauri-plugin-background-monitor = { path = "../../../crates/raspbaby-background" }
+
+[target.'cfg(target_os = "windows")'.dependencies.raspbaby-protocol]
+path = "../../../crates/raspbaby-protocol"
+
+[target.'cfg(target_os = "windows")'.dependencies.serde]
+version = "1"
+features = ["derive"]
+
+[target.'cfg(target_os = "windows")'.dependencies.serde_json]
+version = "1"
+
+[target.'cfg(target_os = "windows")'.dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-single-instance = "2"

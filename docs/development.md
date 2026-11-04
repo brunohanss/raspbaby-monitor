@@ -37,10 +37,35 @@ pnpm tauri android build --debug
 ```
 
 Generated Android files are ignored. Run `android init` on a fresh clone.
-The initial work checks project generation; device launch and playback still
-need validation. Android development may require an explicit Vite host override
-and an address reachable from the emulator. Bind development servers only to
-interfaces needed for that test. Android background monitoring is not supported.
+The Android 15 emulator APK was built, launched, and tested with synthetic
+media and the real Pi VGA camera. Android development may require an explicit Vite host override and an
+address reachable from the emulator. Bind development servers only to the
+interfaces needed for that test.
+
+Android background playback uses the local `raspbaby-background` Tauri plugin.
+The plugin library and manifest are included in the generated Android build.
+Do not copy plugin code into `gen/android`. An explicit connected monitoring
+session starts a foreground service with an ongoing notification. Home, Back,
+screen lock, notification reopen, notification Stop, and disabling background
+support were tested with synthetic and real VGA media in the Android 15 emulator. Physical
+devices, audible output, and long-running operation still need validation.
+See [background validation](background-validation.md) for the results, limits,
+and the unresolved mobile answer-form interaction issue. These results do not
+close the media gate. Clear real VGA image evidence is recorded separately in
+[real camera validation](real-camera-validation.md).
+
+After the Android project includes the plugin, run its local unit tests:
+
+```powershell
+Push-Location apps/monitor/src-tauri/gen/android
+.\gradlew.bat :tauri-plugin-background-monitor:testDebugUnitTest --console=plain
+Pop-Location
+```
+
+The service stops if the playback Activity is destroyed or the app task is
+removed. It does not restart after process death. Back moves an active monitor
+task to the background. Do not treat an Android force stop as a background
+playback operation.
 
 ## Native media spike
 
@@ -61,8 +86,9 @@ cargo run --locked -p raspbaby-daemon --features gstreamer-runtime -- --stdio-sp
 ```
 
 For Debian or Ubuntu development, install `pkg-config`, the GStreamer core,
-base, and bad development libraries, and the base, good, bad, ugly, and libnice
-runtime plugin packages. The native CI job lists the exact package names for
+base, and bad development libraries, and the base, good, bad, ugly, ALSA, and libnice
+runtime plugin packages. Debian packages `alsasrc` separately as `gstreamer1.0-alsa`.
+The native CI job lists the exact package names for
 its Ubuntu runner. Those packages are not a tested Raspberry Pi OS image pin.
 
 Start the receiver and select **Create offer**. Copy the complete JSON line.
@@ -74,7 +100,48 @@ to test 1280×720. The default is 640×480 at 15 FPS.
 
 Do not pipe an offer file into the sender: EOF stops the session. Do not save
 SDP or media. Transfer SDP only through a trusted local channel. The spike has
-no pairing or authenticated network control. It does not capture a USB camera.
+no product pairing or network control listener.
+
+## Real Linux webcam source
+
+The real source requires both device options. It never substitutes synthetic
+media when a device is absent. Use a V4L2 device with MJPEG at 30 FPS and one
+of the two supported sizes: 640×480 or 1280×720. The pipeline decodes MJPEG,
+reduces video to 15 FPS, and encodes H.264. Audio uses ALSA and 48 kHz mono Opus.
+
+On the Pi, from the project directory:
+
+```sh
+CARGO_BUILD_JOBS=1 CARGO_INCREMENTAL=0 CARGO_PROFILE_DEV_DEBUG=0 \
+  "$HOME/.cargo/bin/cargo" build --locked -p raspbaby-daemon --features gstreamer-runtime
+./target/debug/raspbaby-daemon --stdio-spike \
+  --video-device /dev/v4l/by-id/usb-Jieli_Technology_USB_Composite_Device-video-index0 \
+  --audio-device plughw:CARD=Device,DEV=0
+```
+
+Replace these device values with the capability report values for your hardware.
+Add `--hd` for 1280×720. Other formats, arbitrary sizes, automatic selection,
+and camera-native H.264 are not implemented in this spike. Verify capabilities
+with `v4l2-ctl --list-formats-ext` and `arecord -l` before starting capture.
+
+The single build job and disabled development debug information limit build
+memory on the available Pi 3B+. They do not change the media codec. Do not
+interpret a development-build measurement as a production release benchmark.
+
+For an automated remote test, first establish SSH trust and key authentication.
+Do not put a password in the command or an environment file. In PowerShell:
+
+```powershell
+$env:RASPBABY_SSH_TARGET = 'raspbaby@raspbaby.local'
+$env:RASPBABY_REMOTE_COMMAND = '/home/raspbaby/raspbaby-feasibility/target/debug/raspbaby-daemon --stdio-spike --video-device /dev/v4l/by-id/usb-Jieli_Technology_USB_Composite_Device-video-index0 --audio-device plughw:CARD=Device,DEV=0'
+$env:RASPBABY_DURATION_SECONDS = '60'
+pnpm --filter @raspbaby/monitor test:media
+```
+
+Unset `RASPBABY_SPIKE_BIN` when selecting SSH mode. SSH carries signaling through
+authenticated standard input/output. The media uses WebRTC directly. This is
+an operator-driven test, not production pairing. Only use an explicit command
+that you trust. Do not insert user input into the remote shell command.
 
 ## Checks
 
@@ -85,6 +152,7 @@ cargo clippy --locked --all-targets -- -D warnings
 cargo test --locked -p raspbaby-daemon -p raspbaby-media --features gstreamer-runtime
 cargo clippy --locked -p raspbaby-daemon -p raspbaby-media --features gstreamer-runtime --all-targets -- -D warnings
 python -m unittest discover -s tests -v
+python -m unittest discover -s tools/pi3-dwc2-pio -p test_tools.py -v
 pnpm check
 pnpm test
 pnpm build
@@ -118,11 +186,19 @@ $env:RASPBABY_SPIKE_BIN = "$PWD\target\debug\raspbaby-daemon.exe"
 pnpm --filter @raspbaby/monitor test:media
 ```
 
-The runner exchanges SDP in memory, checks inbound video and audio, then stops
-the sender and checks that the old video is cleared. `RASPBABY_TEST_URL` can
+The runner exchanges SDP in memory, verifies negotiated H.264/Opus, checks
+continued media progress for 60 seconds by default, then stops the sender and
+checks that the old video is cleared. `RASPBABY_DURATION_SECONDS` accepts 1 to
+600 seconds. `RASPBABY_TEST_URL` can
 select a built preview server. Prefer a built preview during concurrent work
-to prevent source hot reload from interrupting the test. This test does not
-prove audible output, sync, Windows WebView2, or Android WebView compatibility.
+to prevent source hot reload from interrupting the test.
+
+Set `RASPBABY_CDP_URL` to a temporary loopback debugging endpoint to test an
+already running native WebView. Use `RASPBABY_RUNTIME_LABEL` to identify the
+platform in the output. The Windows and Android smoke checks used this mode.
+Close debugging endpoints after each test. A Chromium-only result does not
+establish native WebView compatibility. Inbound audio bytes do not prove
+audible output or audio/video synchronization.
 
 ## Deferred build commands
 

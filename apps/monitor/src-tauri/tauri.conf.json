@@ -10,9 +10,9 @@
     "frontendDist": "../dist"
   },
   "app": {
-    "windows": [{ "title": "Raspbaby · Media lab", "width": 1180, "height": 850, "minWidth": 360, "minHeight": 640 }],
+    "windows": [{ "label": "main", "title": "Raspbaby Monitor", "width": 1440, "height": 850, "minWidth": 360, "minHeight": 640 }],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob:; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self' blob: data:; connect-src ipc: http://ipc.localhost; object-src 'none'; frame-src 'none'"
     }
   },
   "bundle": { "active": false, "targets": "all" }

@@ -1,5 +1,36 @@
 # Initial validation
 
+## Follow-up: 2026-11-04
+
+The results below describe the initial foundation. New validation supersedes
+its pending real-camera and Android shell checks:
+
+- Windows and Android emulator VGA now have clear full-frame image evidence
+  with the experimental Pi 3B+ DWC2 PIO host and stock UVC driver.
+- Windows monitoring continued for 35 seconds while hidden and reopened with
+  the same peer. Android Home, screen lock, reopen, and notification Stop passed.
+- The current Windows workspace passed 20 Rust unit tests, Cargo Fmt, and
+  Clippy with warnings denied. Native GStreamer checks passed on Windows and
+  the Pi; the Pi ran 14 daemon/media tests.
+- All 11 USB diagnostic tool tests and three capability probe tests passed.
+  The media runner's three self-tests passed. Frontend type, lint, format,
+  production build, and Windows native debug build passed.
+- The final frontend suite passed 17 tests. The exact selected Murloc WAV
+  imported and decoded in native Windows WebView2: duration 2.844458 seconds,
+  advancing playback time, volume 65%, and no media error. Selection survived
+  reload. Browser checks also covered preview Stop, volume persistence, size
+  rejection, and Clear. The audio file remains local and outside Git.
+- The frontend dependency audit found no known vulnerabilities. Cargo audit
+  had no blocking vulnerability and five warnings: the existing GLib iterator
+  advisory and unmaintained proc-macro-error, zbus_names, zvariant, and
+  zvariant_derive dependencies. No advisory suppression was added.
+
+See [real camera validation](real-camera-validation.md),
+[background validation](background-validation.md), and
+[feasibility](feasibility.md) for evidence and remaining checks. The normal Pi
+boot path is unchanged. The PIO driver is temporary and is not a persistent
+installation. The media gate remains open.
+
 Date: 2026-11-03. Host: Windows x86-64. Rust: 1.93.1.
 Node: 24.21.0. pnpm: 12.8.2. GStreamer MSVC: 1.28.8.
 

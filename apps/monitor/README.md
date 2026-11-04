@@ -1,6 +1,6 @@
 # Media receiver development
 
-This Tauri 2 shell uses the same React receiver on Windows and Android. It is a Phase 0 experiment. It does not implement product pairing or network signaling. Use a trusted local terminal for the manual SDP exchange. The receiver does not capture local media or save received media.
+This Tauri 2 shell uses the same React receiver on Windows and Android. It is a Phase 0 experiment, without product pairing. The Windows app can exchange signaling through existing trusted SSH key access; other development clients can use manual SDP exchange. The receiver does not capture local media or save received media.
 
 Use Node 24 and pnpm 12.8.2. From the repository root:
 
@@ -16,11 +16,23 @@ pnpm tauri build --debug --no-bundle
 
 `pnpm dev` starts the browser UI at `http://127.0.0.1:1420`. `pnpm tauri dev` starts the Windows WebView2 shell. Install the Rust MSVC toolchain, Visual Studio C++ build tools, and WebView2 before you start the shell. `cargo check -p raspbaby-monitor-app` checks the Windows shell without opening a window. The bundle configuration is disabled until platform validation is complete.
 
+## Windows camera connection
+
+Build and run the current native Windows app. In **Settings**, enter the Pi
+hostname or private IPv4 address and SSH username, then select **Connect camera**.
+The connector uses Windows OpenSSH with existing keys and a trusted host entry
+in `known_hosts`. It starts the fixed development daemon at
+`/home/<username>/raspbaby-feasibility/target/debug/raspbaby-daemon` on the Pi;
+that daemon and the capture devices must already be ready. It does not install
+software or activate the experimental USB driver. See the
+[root setup instructions](../../README.md) and
+[Pi USB compatibility scope](../../docs/pi3-usb-compatibility.md).
+
 ## Manual media test
 
 1. Build the native daemon with the `gstreamer-runtime` feature. See the root media instructions for required plugins.
 2. Start `raspbaby-daemon --stdio-spike` in a trusted terminal. Keep standard input open.
-3. Select **Create offer** in the UI. Wait for local ICE gathering to finish.
+3. Open **Settings > Advanced connection** and select **Create offer**. Wait for local ICE gathering to finish.
 4. Copy the full offer JSON line to daemon standard input.
 5. Copy the answer JSON line from daemon standard output. Paste it in **Apply the sender answer**.
 6. Select **Apply answer**. Confirm that decoded frames increase. Enable audio and check the sound.
@@ -52,8 +64,12 @@ Install Android Studio, an Android SDK, an NDK, a compatible JDK, and the Rust A
 ```powershell
 pnpm tauri android init
 pnpm tauri android dev
+# Build a debug APK for an x86_64 emulator:
+pnpm tauri android build --debug --target x86_64 --apk --ci
 ```
 
-The generated `src-tauri/gen` tree contains machine-specific build state and is ignored. `android init` was run successfully during scaffold validation. An APK build and launch are separate checks. Do not mark Android media compatibility as verified until the stream works in Android WebView.
+The generated `src-tauri/gen` tree contains machine-specific build state and is ignored. A debug x86_64 APK in the `Medium_Phone_API_35` emulator (Android 15, WebView 124.0.6367.219) played clear real VGA video with advancing audio counters. Home, screen lock, Back, reopening, and notification Stop passed with the experimental Pi DWC2 PIO capture path. Physical-device testing, audible output, and synchronization remain pending. See the [camera report](../../docs/real-camera-validation.md) and [background validation](../../docs/background-validation.md).
 
-For a physical Android device, pass the LAN host explicitly when you start the Vite server, and configure the Tauri development URL for that host. The default development server binds only to loopback. Do not expose the development server outside the test network. Android screen lock and background monitoring are not supported.
+On Windows, Kotlin incremental compilation can fail when the Cargo registry and project are on different drives. The tested build recovered through the Gradle fallback compiler. If a build stops on this error, set `kotlin.incremental=false` in the generated Android `gradle.properties` and build again. This setting changes compiler caching only.
+
+For a physical Android device, pass the LAN host explicitly when you start the Vite server, and configure the Tauri development URL for that host. The default development server binds only to loopback. Do not expose the development server outside the test network. Emulator background results do not establish physical-device behavior.

@@ -1,6 +1,7 @@
 # ADR 0001: Validate GStreamer before product features
 
-Status: Accepted for the feasibility spike. Hardware validation is pending.
+Status: Accepted for the feasibility spike. Real Pi 3B+ transport is tested;
+full feasibility acceptance remains open.
 
 ## Context
 
@@ -15,7 +16,8 @@ Build a small Rust media spike with synthetic video and audio. Put native
 GStreamer code behind an explicit Cargo feature. Use the same receiver in the
 Windows and Android Tauri application. Keep the source choice explicit.
 
-Use local manual SDP exchange for this spike. Do not start an HTTP or WebSocket
+Use local manual SDP exchange or authenticated SSH stdio for this spike.
+Do not start an HTTP or WebSocket
 signaling server. Do not configure public STUN or TURN servers. This workflow
 requires an operator at each end. It is not the production pairing protocol.
 Exchange SDP only through a trusted local channel. SDP can contain local network

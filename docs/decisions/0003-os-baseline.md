@@ -1,12 +1,15 @@
-# ADR 0003: Hold the OS image pin until hardware validation
+# ADR 0003: Pin the observed Trixie image and keep hardware scope explicit
 
-Status: Proposed. Blocked on a Raspberry Pi test.
+Status: Accepted for the available Pi 3B+ feasibility tests. Pi 4 validation is pending.
 
 The required target is Raspberry Pi OS Lite 64-bit, based on Debian 13 Trixie.
-No OS image has been tested for this project. Do not mark an image as supported
-or add a fabricated checksum.
+The running Pi reports the 2026-10-06 image reference and Debian 13.7.
+The local Imager cached download matches the official image checksum and catalog.
+The exact URL and SHA-256 are stored in `config/tested-os-image.json`.
 
-Before RB-001 is complete, record the image release, official download URL,
-SHA-256 checksum, Pi model, camera model, and capability report. Store the exact
-image identity in build configuration before work on the installer or image
-generator starts. Do not change the OS major version without a new decision.
+This verifies the cached download. It does not independently prove the original
+flashed-image bytes. Record that distinction. The available Pi is a 3B+, not the
+planned Pi 4. Do not extend its test result to Pi 4 or other camera models.
+
+Use the pin when preparing future installation work. Verify the image again
+before flashing. Do not silently change the image release or OS major version.

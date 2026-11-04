@@ -1,5 +1,17 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { MediaReceiver, type ReceiverUpdate } from "./receiver";
+import {
+  MediaReceiver,
+  type MediaStats,
+  type ReceiverUpdate,
+} from "./receiver";
+
+class FakeVisibility extends EventTarget {
+  visibilityState: DocumentVisibilityState = "visible";
+  set(state: DocumentVisibilityState) {
+    this.visibilityState = state;
+    this.dispatchEvent(new Event("visibilitychange"));
+  }
+}
 
 class FakePeer extends EventTarget {
   iceGatheringState = "complete";
@@ -18,19 +30,37 @@ class FakePeer extends EventTarget {
   setRemoteDescription = vi.fn(async () => undefined);
   close = vi.fn();
   decoded = 0;
+  videoBytes = 100;
+  audioBytes = 0;
+  audioLevel: number | undefined;
+  width: number | undefined;
+  height: number | undefined;
   getStats = vi.fn(
     async () =>
-      new Map([
+      new Map<string, Record<string, unknown>>([
         [
           "video",
           {
             type: "inbound-rtp",
             kind: "video",
             framesDecoded: this.decoded,
-            bytesReceived: 100,
+            bytesReceived: this.videoBytes,
             packetsLost: 0,
+            frameWidth: this.width,
+            frameHeight: this.height,
+            codecId: "videoCodec",
           },
         ],
+        [
+          "audio",
+          {
+            type: "inbound-rtp",
+            kind: "audio",
+            bytesReceived: this.audioBytes,
+            audioLevel: this.audioLevel,
+          },
+        ],
+        ["videoCodec", { type: "codec", mimeType: "video/H264" }],
       ]),
   );
 }
@@ -39,6 +69,8 @@ describe("manual media receiver", () => {
   let peer: FakePeer;
   let receiver: MediaReceiver;
   let updates: ReceiverUpdate[];
+  let measured: MediaStats[];
+  let visibility: FakeVisibility;
   let onStream: ReturnType<typeof vi.fn<(stream: MediaStream | null) => void>>;
   let stop: ReturnType<typeof vi.fn<() => void>>;
   beforeEach(() => {
@@ -48,6 +80,8 @@ describe("manual media receiver", () => {
     });
     peer = new FakePeer();
     updates = [];
+    measured = [];
+    visibility = new FakeVisibility();
     onStream = vi.fn<(stream: MediaStream | null) => void>();
     stop = vi.fn<() => void>();
     receiver = new MediaReceiver({
@@ -59,8 +93,9 @@ describe("manual media receiver", () => {
         }) as unknown as MediaStream,
       onUpdate: (update) => updates.push(update),
       onStream,
-      onStats: vi.fn(),
+      onStats: (stats) => measured.push(stats),
       iceTimeoutMs: 100,
+      visibilitySource: visibility,
     });
   });
   afterEach(() => {
@@ -127,6 +162,95 @@ describe("manual media receiver", () => {
     expect(updates.at(-1)?.state).toBe("disconnected");
     expect(peer.close).toHaveBeenCalled();
     expect(onStream).toHaveBeenLastCalledWith(null);
+  });
+
+  it("retains a hidden connection with progressing video bytes even when decoding pauses", async () => {
+    const offer = JSON.parse(await receiver.start());
+    await receiver.accept(JSON.stringify({ ...offer, type: "webrtc.answer" }));
+    peer.decoded = 1;
+    await vi.advanceTimersByTimeAsync(1000);
+    visibility.set("hidden");
+    for (let second = 0; second < 8; second++) {
+      peer.videoBytes += 100;
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(updates.at(-1)?.state).toBe("receiving");
+    expect(peer.close).not.toHaveBeenCalled();
+
+    visibility.set("visible");
+    expect(updates.at(-1)?.state).toBe("connecting");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(updates.at(-1)?.state).toBe("connecting");
+    peer.decoded = 2;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(updates.at(-1)?.state).toBe("receiving");
+  });
+
+  it("clears stalled hidden video even if audio bytes keep arriving", async () => {
+    const offer = JSON.parse(await receiver.start());
+    await receiver.accept(JSON.stringify({ ...offer, type: "webrtc.answer" }));
+    peer.decoded = 1;
+    await vi.advanceTimersByTimeAsync(1000);
+    visibility.set("hidden");
+    for (let second = 0; second < 6; second++) {
+      peer.audioBytes += 100;
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(updates.at(-1)?.state).toBe("failed");
+    expect(peer.close).toHaveBeenCalled();
+    expect(onStream).toHaveBeenLastCalledWith(null);
+  });
+
+  it("clears the old visible frame after resume when bytes arrive but decoding does not resume", async () => {
+    const offer = JSON.parse(await receiver.start());
+    await receiver.accept(JSON.stringify({ ...offer, type: "webrtc.answer" }));
+    peer.decoded = 1;
+    await vi.advanceTimersByTimeAsync(1000);
+    visibility.set("hidden");
+    peer.videoBytes += 100;
+    await vi.advanceTimersByTimeAsync(1000);
+    visibility.set("visible");
+    expect(updates.at(-1)?.state).toBe("connecting");
+    for (let second = 0; second < 6; second++) {
+      peer.videoBytes += 100;
+      await vi.advanceTimersByTimeAsync(1000);
+    }
+    expect(updates.at(-1)?.state).toBe("failed");
+    expect(onStream).toHaveBeenLastCalledWith(null);
+  });
+
+  it("publishes only observed dimensions, codec, and audio levels; missing levels remain unknown", async () => {
+    const offer = JSON.parse(await receiver.start());
+    await receiver.accept(JSON.stringify({ ...offer, type: "webrtc.answer" }));
+    peer.decoded = 1;
+    peer.audioBytes = 100;
+    peer.width = 1280;
+    peer.height = 720;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(measured.at(-1)).toMatchObject({
+      width: 1280,
+      height: 720,
+      videoCodec: "video/H264",
+      audioAvailable: true,
+      audioLevel: null,
+    });
+    peer.audioLevel = 0.42;
+    peer.decoded++;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(measured.at(-1)?.audioLevel).toBe(0.42);
+    peer.audioLevel = 0;
+    peer.decoded++;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(measured.at(-1)?.audioLevel).toBe(0);
+    peer.audioLevel = 2;
+    peer.decoded++;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(measured.at(-1)?.audioLevel).toBeNull();
+    receiver.close();
+    expect(measured.at(-1)).toMatchObject({
+      audioLevel: null,
+      audioAvailable: false,
+    });
   });
 
   it("closes the peer when its answer SDP is rejected", async () => {

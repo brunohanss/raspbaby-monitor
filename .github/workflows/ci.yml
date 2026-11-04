@@ -24,6 +24,7 @@ jobs:
       - run: cargo test --locked
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: python3 -m unittest discover -s tests -v
+      - run: python3 -m unittest discover -s tools/pi3-dwc2-pio -p test_tools.py -v
 
   media-native:
     runs-on: ubuntu-24.04
@@ -38,7 +39,7 @@ jobs:
           libgstreamer1.0-dev libgstreamer-plugins-base1.0-dev
           libgstreamer-plugins-bad1.0-dev gstreamer1.0-plugins-base
           gstreamer1.0-plugins-good gstreamer1.0-plugins-bad
-          gstreamer1.0-plugins-ugly gstreamer1.0-nice
+          gstreamer1.0-plugins-ugly gstreamer1.0-nice gstreamer1.0-alsa
       - run: cargo test --locked -p raspbaby-daemon -p raspbaby-media --features gstreamer-runtime
       - run: cargo clippy --locked -p raspbaby-daemon -p raspbaby-media --features gstreamer-runtime --all-targets -- -D warnings
       - uses: pnpm/action-setup@v4
@@ -77,6 +78,7 @@ jobs:
       - run: pnpm check
       - run: pnpm --filter @raspbaby/monitor format:check
       - run: pnpm test
+      - run: pnpm --filter @raspbaby/monitor exec node scripts/media-integration.mjs --self-test
       - run: pnpm build
 
   windows-shell:
@@ -92,6 +94,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
       - run: cargo check --locked -p raspbaby-monitor-app
+      - run: cargo test --locked -p raspbaby-monitor-app
 
   dependencies:
     runs-on: ubuntu-24.04

@@ -1,0 +1,8 @@
+{
+  "$schema": "../gen/schemas/mobile-schema.json",
+  "identifier": "android-background",
+  "description": "Allow the main Android window to control its playback foreground service.",
+  "windows": ["main"],
+  "platforms": ["android"],
+  "permissions": ["background-monitor:default"]
+}

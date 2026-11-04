@@ -1,0 +1,3 @@
+[default]
+description = "Allow control of the explicit Android background playback session."
+permissions = ["allow-start", "allow-stop", "allow-status", "allow-heartbeat"]

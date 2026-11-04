@@ -12,6 +12,7 @@ PLUGINS = (
     "webrtcbin", "nice", "dtls", "srtp", "v4l2src", "alsasrc",
     "videotestsrc", "audiotestsrc", "x264enc", "openh264enc",
     "h264parse", "rtph264pay", "opusenc", "rtpopuspay",
+    "jpegdec", "videorate", "v4l2h264enc",
 )
 
 

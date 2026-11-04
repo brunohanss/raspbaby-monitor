@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "name": "Raspberry Pi OS Lite (64-bit)",
+  "release_date": "2026-10-06",
+  "architecture": "arm64",
+  "distribution": "Debian 13 (Trixie)",
+  "image_url": "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-10-06/2026-10-06-raspios-trixie-arm64-lite.img.xz",
+  "sha256": "483db18a48da399b5b7022ffae9a07bc6d99daab30e593aedac09b69ff422843",
+  "download_size_bytes": 550466056,
+  "verification": {
+    "verified_at_utc": "2026-11-03T20:20:29Z",
+    "status": "cached_download_matches_official_checksum",
+    "checksum_url": "https://downloads.raspberrypi.com/raspios_lite_arm64/images/raspios_lite_arm64-2026-10-06/2026-10-06-raspios-trixie-arm64-lite.img.xz.sha256",
+    "catalog_url": "https://downloads.raspberrypi.com/os_list_imagingutility_v4.json",
+    "method": "Read the official checksum and catalog over HTTPS. Calculate SHA-256 for the local Raspberry Pi Imager cached download. Check the hash, image URL, release date, and download size.",
+    "cached_download_sha256_matches": true,
+    "catalog_download_size_matches": true,
+    "flashed_image_identity_verified": false
+  },
+  "hardware_scope": {
+    "available_device": "Raspberry Pi 3 Model B Plus",
+    "reported_os_version": "Debian 13.7",
+    "reported_image_reference": "2026-10-06",
+    "reported_pi_gen_commit": "b2cd98a9ee08a31ef7d0110ed09f2492bbd972ec",
+    "reported_pi_gen_stage": "stage2",
+    "status": "Hardware validation is in progress on a Pi 3B+. The running OS reports the same image release. This does not prove that the cached image was flashed to this device.",
+    "raspberry_pi_4_validated": false
+  }
+}

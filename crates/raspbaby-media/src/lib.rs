@@ -1,11 +1,12 @@
-//! Phase 0 synthetic media spike. No device capture or network signaling service.
+//! Phase 0 media spike. Synthetic media or explicit Linux V4L2/ALSA capture.
+//! No network signaling service or media recording.
 
 use std::fmt;
 
 #[cfg(feature = "gstreamer-runtime")]
 mod runtime;
 #[cfg(feature = "gstreamer-runtime")]
-pub use runtime::SyntheticSession;
+pub use runtime::MediaSession;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaError(pub String);
@@ -17,6 +18,70 @@ impl fmt::Display for MediaError {
 }
 
 impl std::error::Error for MediaError {}
+
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub enum SourceConfig {
+    #[default]
+    Synthetic,
+    LinuxCapture(LinuxCapture),
+}
+
+/// Device strings are validated once and are set through GStreamer properties.
+/// They must never be interpolated into a pipeline launch string.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LinuxCapture {
+    video_device: String,
+    audio_device: String,
+}
+
+impl LinuxCapture {
+    pub fn new(video_device: &str, audio_device: &str) -> Result<Self, MediaError> {
+        let valid_video = if let Some(name) = video_device.strip_prefix("/dev/v4l/by-id/") {
+            !name.is_empty()
+                && name.len() <= 255
+                && name
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-' | b'.' | b':'))
+                && name != "."
+                && name != ".."
+        } else if let Some(index) = video_device.strip_prefix("/dev/video") {
+            !index.is_empty() && index.len() <= 3 && index.bytes().all(|b| b.is_ascii_digit())
+        } else {
+            false
+        };
+        if !valid_video {
+            return Err(MediaError("video device must be /dev/v4l/by-id/<device> or /dev/video<index>; use the stable by-id path when available".into()));
+        }
+        let valid_audio = audio_device
+            .strip_prefix("plughw:CARD=")
+            .and_then(|value| value.split_once(",DEV="))
+            .is_some_and(|(card, device)| {
+                !card.is_empty()
+                    && card.len() <= 32
+                    && card
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+                    && !device.is_empty()
+                    && device.len() <= 2
+                    && device.bytes().all(|b| b.is_ascii_digit())
+                    && device.parse::<u8>().is_ok_and(|index| index <= 31)
+            });
+        if !valid_audio {
+            return Err(MediaError("audio device must be plughw:CARD=<card-name>,DEV=<0..31>; use arecord -l to find the capture card".into()));
+        }
+        Ok(Self {
+            video_device: video_device.into(),
+            audio_device: audio_device.into(),
+        })
+    }
+
+    pub fn video_device(&self) -> &str {
+        &self.video_device
+    }
+    pub fn audio_device(&self) -> &str {
+        &self.audio_device
+    }
+}
 
 /// Fixed presets keep pipeline inputs bounded and prohibit launch-string injection.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -120,19 +185,41 @@ impl PayloadTypes {
     }
 }
 
-/// No files, capture devices, remote URLs, STUN servers, or TURN servers are used.
+/// No files, remote URLs, STUN servers, or TURN servers are used.
 /// Drop only raw buffers under load. RTP queues apply backpressure because
 /// dropping individual H.264 packets can destroy an entire encoded frame.
 pub fn synthetic_pipeline(preset: VideoPreset, payloads: PayloadTypes) -> String {
+    media_pipeline(preset, payloads, &SourceConfig::Synthetic)
+}
+
+pub fn media_pipeline(
+    preset: VideoPreset,
+    payloads: PayloadTypes,
+    source: &SourceConfig,
+) -> String {
     let (width, height) = preset.dimensions();
+    let (video, audio) = match source {
+        SourceConfig::Synthetic => (
+            format!(
+                "videotestsrc is-live=true pattern=ball ! video/x-raw,width={width},height={height},framerate=15/1"
+            ),
+            "audiotestsrc is-live=true wave=sine volume=0.1",
+        ),
+        SourceConfig::LinuxCapture(_) => (
+            format!(
+                "v4l2src name=camera do-timestamp=true ! image/jpeg,width={width},height={height},framerate=30/1 ! identity drop-buffer-flags=corrupted ! jpegdec ! videorate drop-only=true ! video/x-raw,width={width},height={height},framerate=15/1"
+            ),
+            "alsasrc name=microphone do-timestamp=true",
+        ),
+    };
     format!(
         "webrtcbin name=peer bundle-policy=max-bundle \
-         videotestsrc is-live=true pattern=ball ! video/x-raw,width={width},height={height},framerate=15/1 ! \
+         {video} ! \
          queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream ! \
          videoconvert ! x264enc tune=zerolatency speed-preset=ultrafast bitrate=1500 key-int-max=30 bframes=0 ! \
          video/x-h264,profile=constrained-baseline ! h264parse ! rtph264pay pt={} config-interval=-1 ! \
          application/x-rtp,media=video,encoding-name=H264,payload={} ! queue max-size-buffers=128 max-size-bytes=0 max-size-time=200000000 ! peer.sink_0 \
-         audiotestsrc is-live=true wave=sine volume=0.1 ! audioconvert ! audioresample ! \
+         {audio} ! audioconvert ! audioresample ! \
          audio/x-raw,rate=48000,channels=1 ! queue max-size-buffers=3 max-size-bytes=0 max-size-time=0 leaky=downstream ! opusenc bitrate=32000 ! rtpopuspay pt={} ! \
          application/x-rtp,media=audio,encoding-name=OPUS,payload={} ! queue max-size-buffers=128 max-size-bytes=0 max-size-time=200000000 ! peer.sink_1",
         payloads.h264, payloads.h264, payloads.opus, payloads.opus
@@ -142,6 +229,88 @@ pub fn synthetic_pipeline(preset: VideoPreset, payloads: PayloadTypes) -> String
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn validates_capture_devices_without_launch_string_interpolation() {
+        let path = "/dev/v4l/by-id/usb-Jieli_Technology_USB_Composite_Device-video-index0";
+        let capture = LinuxCapture::new(path, "plughw:CARD=Device,DEV=0").unwrap();
+        assert_eq!(capture.video_device(), path);
+        assert_eq!(capture.audio_device(), "plughw:CARD=Device,DEV=0");
+        for preset in [VideoPreset::Vga, VideoPreset::Hd] {
+            let pipeline = media_pipeline(
+                preset,
+                PayloadTypes {
+                    h264: 108,
+                    opus: 111,
+                },
+                &SourceConfig::LinuxCapture(capture.clone()),
+            );
+            let (width, height) = preset.dimensions();
+            assert!(pipeline.contains(&format!(
+                "image/jpeg,width={width},height={height},framerate=30/1"
+            )));
+            // Require actual decoded dimensions. No videoscale element can
+            // turn a lower-resolution camera frame into an apparent preset pass.
+            assert!(pipeline.contains(&format!("jpegdec ! videorate drop-only=true ! video/x-raw,width={width},height={height},framerate=15/1")));
+            assert!(!pipeline.contains("videoscale"));
+            assert!(pipeline.contains("alsasrc name=microphone"));
+            assert!(!pipeline.contains(path));
+            assert!(!pipeline.contains("plughw:"));
+            assert!(!pipeline.contains("testsrc"));
+        }
+    }
+
+    #[test]
+    fn rejects_unsafe_or_unsupported_capture_device_names() {
+        for path in [
+            "",
+            "/tmp/camera",
+            "/dev/video",
+            "/dev/video1000",
+            "/dev/v4l/by-id/..",
+            "/dev/v4l/by-id/../../etc/passwd",
+            "/dev/video0 ! filesink location=leak",
+            "/dev/video0\n",
+            "/dev/v4l/by-id/\"camera\"",
+        ] {
+            assert!(LinuxCapture::new(path, "plughw:CARD=Device,DEV=0").is_err());
+        }
+        for device in [
+            "",
+            "default",
+            "plughw:CARD=,DEV=0",
+            "plughw:CARD=Device,DEV=32",
+            "plughw:CARD=Device,DEV=-1",
+            "plughw:CARD=Device,DEV=0 ! fakesink",
+            "plughw:CARD=Device,DEV=0\n",
+            "plughw:CARD=Device,DEV=é",
+        ] {
+            assert!(LinuxCapture::new("/dev/video0", device).is_err());
+        }
+        assert!(LinuxCapture::new("/dev/video999", "plughw:CARD=USB_Audio-1,DEV=31").is_ok());
+    }
+
+    #[test]
+    fn discards_flagged_capture_frames_before_jpeg_decoding() {
+        let source = SourceConfig::LinuxCapture(
+            LinuxCapture::new("/dev/video0", "plughw:CARD=Device,DEV=0").unwrap(),
+        );
+        let payloads = PayloadTypes {
+            h264: 108,
+            opus: 111,
+        };
+        for preset in [VideoPreset::Vga, VideoPreset::Hd] {
+            let pipeline = media_pipeline(preset, payloads, &source);
+            let (width, height) = preset.dimensions();
+            // V4L2 error buffers must be discarded while still compressed.
+            // Filtering after jpegdec would let damaged JPEG data reach it.
+            assert!(pipeline.contains(&format!(
+                "image/jpeg,width={width},height={height},framerate=30/1 ! identity drop-buffer-flags=corrupted ! jpegdec"
+            )));
+            assert_eq!(pipeline.matches("drop-buffer-flags=").count(), 1);
+            assert!(!synthetic_pipeline(preset, payloads).contains("drop-buffer-flags="));
+        }
+    }
 
     #[test]
     fn uses_offered_payloads_and_correct_media_sections() {

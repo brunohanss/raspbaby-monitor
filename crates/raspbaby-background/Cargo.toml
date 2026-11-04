@@ -1,0 +1,13 @@
+[package]
+name = "tauri-plugin-background-monitor"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+links = "tauri-plugin-background-monitor"
+description = "Android foreground lifetime for an explicit Raspbaby playback session"
+
+[build-dependencies]
+tauri-plugin = { version = "2", features = ["build"] }
+
+[dependencies]
+tauri = { version = "2", default-features = false }
